@@ -20,6 +20,15 @@
 # production
 /build
 
+# Rust
+/target/
+Cargo.lock
+**/*.rs.bk
+*.pdb
+
+# sol-safekey library (should be added as submodule or cloned separately)
+/sol-safekey/
+
 # misc
 .DS_Store
 *.pem
@@ -39,3 +48,7 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# Logs
+*.log
+/tmp/
