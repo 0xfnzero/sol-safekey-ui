@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { toast } from "sonner";
+import { useTranslations } from 'next-intl';
 import {
   Key,
   Lock,
@@ -21,6 +22,7 @@ import {
   Unlock,
   X,
 } from "lucide-react";
+import LanguageSwitcher from '@/components/LanguageSwitcher';
 
 interface MenuItem {
   id: string;
@@ -38,88 +40,90 @@ interface ApiRequestBody {
   [key: string]: string | number | undefined;
 }
 
-const menuItems: MenuItem[] = [
-  {
-    id: "create",
-    label: "🔑 核心功能",
-    icon: <Key className="w-5 h-5" />,
-    children: [
-      { id: "create-plain", label: "1. 创建明文私钥", icon: <Key className="w-4 h-4" /> },
-      { id: "create-encrypted", label: "2. 创建加密私钥", icon: <Lock className="w-4 h-4" /> },
-      { id: "create-keystore", label: "创建 Keystore 文件", icon: <FileText className="w-4 h-4" /> },
-    ],
-  },
-  {
-    id: "import",
-    label: "📥 导入钱包",
-    icon: <Upload className="w-5 h-5" />,
-    children: [
-      { id: "import-keystore", label: "导入 Keystore 文件", icon: <FileText className="w-4 h-4" /> },
-      { id: "decrypt", label: "3. 解密私钥", icon: <Lock className="w-4 h-4" /> },
-    ],
-  },
-  {
-    id: "security",
-    label: "🛡️ 高级安全",
-    icon: <Lock className="w-5 h-5" />,
-    children: [
-      { id: "setup-2fa", label: "4. 设置 2FA 认证", icon: <Lock className="w-4 h-4" /> },
-      { id: "create-tfa", label: "5. 生成三重钱包 (3FA)", icon: <Lock className="w-4 h-4" /> },
-      { id: "unlock-tfa", label: "6. 解锁三重钱包", icon: <Unlock className="w-4 h-4" /> },
-    ],
-  },
-  {
-    id: "wallet",
-    label: "💰 钱包操作",
-    icon: <Wallet className="w-5 h-5" />,
-    children: [
-      { id: "unlock", label: "U. 解锁钱包", icon: <Unlock className="w-4 h-4" /> },
-      { id: "check-balance", label: "7. 查询 SOL 余额", icon: <Wallet className="w-4 h-4" />, network: true },
-      { id: "get-pubkey", label: "获取公钥", icon: <Key className="w-4 h-4" /> },
-    ],
-  },
-  {
-    id: "transfer",
-    label: "💸 转账",
-    icon: <Send className="w-5 h-5" />,
-    children: [
-      { id: "transfer-sol", label: "8. 转账 SOL", icon: <Send className="w-4 h-4" />, network: true },
-      { id: "transfer-token", label: "13. 转账 SPL Token", icon: <Coins className="w-4 h-4" />, network: true },
-    ],
-  },
-  {
-    id: "wsol",
-    label: "🔄 WSOL 操作",
-    icon: <RefreshCw className="w-5 h-5" />,
-    children: [
-      { id: "create-wsol-ata", label: "9. 创建 WSOL ATA", icon: <Hash className="w-4 h-4" />, network: true },
-      { id: "wrap-sol", label: "10. 封装 SOL → WSOL", icon: <RefreshCw className="w-4 h-4" />, network: true },
-      { id: "unwrap-sol", label: "11. 解封 WSOL → SOL", icon: <ArrowRightLeft className="w-4 h-4" />, network: true },
-      { id: "close-wsol-ata", label: "12. 关闭 WSOL ATA", icon: <X className="w-4 h-4" />, network: true },
-    ],
-  },
-  {
-    id: "pump",
-    label: "💎 Pump.fun/PumpSwap",
-    icon: <Coins className="w-5 h-5" />,
-    children: [
-      { id: "pumpfun-sell", label: "15. Pump.fun 卖出", icon: <Coins className="w-4 h-4" />, network: true },
-      { id: "pumpswap-sell", label: "16. PumpSwap 卖出", icon: <Coins className="w-4 h-4" />, network: true },
-      { id: "pumpfun-cashback", label: "17. Pump.fun 返现", icon: <Coins className="w-4 h-4" />, network: true },
-      { id: "pumpswap-cashback", label: "18. PumpSwap 返现", icon: <Coins className="w-4 h-4" />, network: true },
-    ],
-  },
-  {
-    id: "advanced",
-    label: "⚙️ 高级操作",
-    icon: <Hash className="w-5 h-5" />,
-    children: [
-      { id: "create-nonce", label: "14. 创建 Nonce 账户", icon: <Hash className="w-4 h-4" />, network: true },
-    ],
-  },
-];
-
 export default function Home() {
+  const t = useTranslations();
+
+  const menuItems: MenuItem[] = [
+    {
+      id: "create",
+      label: t("menu.core"),
+      icon: <Key className="w-5 h-5" />,
+      children: [
+        { id: "create-plain", label: t("features.create-plain.title"), icon: <Key className="w-4 h-4" /> },
+        { id: "create-encrypted", label: t("features.create-encrypted.title"), icon: <Lock className="w-4 h-4" /> },
+        { id: "create-keystore", label: t("features.create-keystore.title"), icon: <FileText className="w-4 h-4" /> },
+      ],
+    },
+    {
+      id: "import",
+      label: t("menu.import"),
+      icon: <Upload className="w-5 h-5" />,
+      children: [
+        { id: "import-keystore", label: t("features.import-keystore.title"), icon: <FileText className="w-4 h-4" /> },
+        { id: "decrypt", label: t("features.decrypt.title"), icon: <Lock className="w-4 h-4" /> },
+      ],
+    },
+    {
+      id: "security",
+      label: t("menu.security"),
+      icon: <Lock className="w-5 h-5" />,
+      children: [
+        { id: "setup-2fa", label: t("features.setup-2fa.title"), icon: <Lock className="w-4 h-4" /> },
+        { id: "create-tfa", label: t("features.create-tfa.title"), icon: <Lock className="w-4 h-4" /> },
+        { id: "unlock-tfa", label: t("features.unlock-tfa.title"), icon: <Unlock className="w-4 h-4" /> },
+      ],
+    },
+    {
+      id: "wallet",
+      label: t("menu.wallet"),
+      icon: <Wallet className="w-5 h-5" />,
+      children: [
+        { id: "unlock", label: t("features.unlock.title"), icon: <Unlock className="w-4 h-4" /> },
+        { id: "check-balance", label: t("features.check-balance.title"), icon: <Wallet className="w-4 h-4" />, network: true },
+        { id: "get-pubkey", label: t("features.get-pubkey.title"), icon: <Key className="w-4 h-4" /> },
+      ],
+    },
+    {
+      id: "transfer",
+      label: t("menu.transfer"),
+      icon: <Send className="w-5 h-5" />,
+      children: [
+        { id: "transfer-sol", label: t("features.transfer-sol.title"), icon: <Send className="w-4 h-4" />, network: true },
+        { id: "transfer-token", label: t("features.transfer-token.title"), icon: <Coins className="w-4 h-4" />, network: true },
+      ],
+    },
+    {
+      id: "wsol",
+      label: t("menu.wsol"),
+      icon: <RefreshCw className="w-5 h-5" />,
+      children: [
+        { id: "create-wsol-ata", label: t("features.create-wsol-ata.title"), icon: <Hash className="w-4 h-4" />, network: true },
+        { id: "wrap-sol", label: t("features.wrap-sol.title"), icon: <RefreshCw className="w-4 h-4" />, network: true },
+        { id: "unwrap-sol", label: t("features.unwrap-sol.title"), icon: <ArrowRightLeft className="w-4 h-4" />, network: true },
+        { id: "close-wsol-ata", label: t("features.close-wsol-ata.title"), icon: <X className="w-4 h-4" />, network: true },
+      ],
+    },
+    {
+      id: "pump",
+      label: t("menu.pump"),
+      icon: <Coins className="w-5 h-5" />,
+      children: [
+        { id: "pumpfun-sell", label: t("features.pumpfun-sell.title"), icon: <Coins className="w-4 h-4" />, network: true },
+        { id: "pumpswap-sell", label: t("features.pumpswap-sell.title"), icon: <Coins className="w-4 h-4" />, network: true },
+        { id: "pumpfun-cashback", label: t("features.pumpfun-cashback.title"), icon: <Coins className="w-4 h-4" />, network: true },
+        { id: "pumpswap-cashback", label: t("features.pumpswap-cashback.title"), icon: <Coins className="w-4 h-4" />, network: true },
+      ],
+    },
+    {
+      id: "advanced",
+      label: t("menu.advanced"),
+      icon: <Hash className="w-5 h-5" />,
+      children: [
+        { id: "create-nonce", label: t("features.create-nonce.title"), icon: <Hash className="w-4 h-4" />, network: true },
+      ],
+    },
+  ];
+
   const [activeMenu, setActiveMenu] = useState<string | null>(null);
   const [selectedForm, setSelectedForm] = useState<string | null>(null);
   const [formData, setFormData] = useState<FormState>({});
@@ -3876,11 +3880,14 @@ export default function Home() {
     <div className="flex h-screen bg-black text-white">
       {/* Left Sidebar */}
       <div className="w-80 bg-black/40 backdrop-blur-xl border-r border-white/10 flex flex-col">
-        <div className="p-6 border-b border-white/10">
-          <h1 className="text-2xl font-bold bg-gradient-to-r from-purple-400 to-pink-400 bg-clip-text text-transparent">
-            Sol SafeKey UI
-          </h1>
-          <p className="text-sm text-gray-400 mt-1">完整的 Solana 钱包管理工具</p>
+        <div className="p-6 border-b border-white/10 flex items-center justify-between">
+          <div>
+            <h1 className="text-2xl font-bold bg-gradient-to-r from-purple-400 to-pink-400 bg-clip-text text-transparent">
+              {t("app.title")}
+            </h1>
+            <p className="text-sm text-gray-400 mt-1">{t("app.subtitle")}</p>
+          </div>
+          <LanguageSwitcher />
         </div>
 
         <nav className="flex-1 overflow-y-auto p-4 space-y-2 scrollbar-thin">
@@ -3936,12 +3943,12 @@ export default function Home() {
                   ? menuItems
                       .flatMap((m) => m.children || [])
                       .find((c) => c?.id === selectedForm)?.label
-                  : "欢迎使用 Sol SafeKey"}
+                  : t("app.welcome")}
               </h2>
               {selectedForm ? renderForm(selectedForm) : (
                 <div className="text-center py-12 text-gray-400">
                   <Key className="w-16 h-16 mx-auto mb-4 opacity-50" />
-                  <p className="text-lg">请从左侧菜单选择一个功能开始使用</p>
+                  <p className="text-lg">{t("app.selectFeature")}</p>
                 </div>
               )}
             </div>
