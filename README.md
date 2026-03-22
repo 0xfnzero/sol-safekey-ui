@@ -1,14 +1,58 @@
-# Sol SafeKey UI
-
 <div align="center">
-
-![Sol SafeKey UI](https://img.shields.io/badge/Solana-SafeKey%20UI-purple?style=for-the-badge&logo=solana)
-
-Complete Solana wallet management tool with advanced security features and 18+ professional operations
-
-English | [简体中文](./README.zh-CN.md)
-
+    <h1>🔐 Sol SafeKey UI</h1>
+    <h3><em>Secure Web-Based Solana Wallet Management Interface</em></h3>
 </div>
+
+<p align="center">
+    <strong>A comprehensive, secure web interface for Solana wallet management with 18+ professional operations. Built with Next.js and featuring advanced security features including 2FA/3FA authentication, keystore file support, and seamless integration with sol-safekey backend.</strong>
+</p>
+
+<p align="center">
+    <a href="https://github.com/0xfnzero/sol-safekey-ui/blob/main/LICENSE">
+        <img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="License">
+    </a>
+    <a href="https://github.com/0xfnzero/sol-safekey-ui">
+        <img src="https://img.shields.io/github/stars/0xfnzero/sol-safekey-ui?style=social" alt="GitHub stars">
+    </a>
+    <a href="https://github.com/0xfnzero/sol-safekey-ui/network">
+        <img src="https://img.shields.io/github/forks/0xfnzero/sol-safekey-ui?style=social" alt="GitHub forks">
+    </a>
+</p>
+
+<p align="center">
+    <img src="https://img.shields.io/badge/Next.js-000000?style=for-the-badge&logo=next.js&logoColor=white" alt="Next.js">
+    <img src="https://img.shields.io/badge/React-20232A?style=for-the-badge&logo=react&logoColor=61DAFB" alt="React">
+    <img src="https://img.shields.io/badge/Solana-9945FF?style=for-the-badge&logo=solana&logoColor=white" alt="Solana">
+    <img src="https://img.shields.io/badge/TypeScript-007ACC?style=for-the-badge&logo=typescript&logoColor=white" alt="TypeScript">
+</p>
+
+<p align="center">
+    <a href="https://github.com/0xfnzero/sol-safekey-ui/blob/main/README.zh-CN.md">中文</a> |
+    <a href="https://github.com/0xfnzero/sol-safekey-ui/blob/main/README.md">English</a> |
+    <a href="https://fnzero.dev/">Website</a> |
+    <a href="https://t.me/fnzero_group">Telegram</a> |
+    <a href="https://discord.gg/vuazbGkqQE">Discord</a>
+</p>
+
+## 📋 Table of Contents
+
+- [✨ Features](#-features)
+- [🌍 Internationalization](#-internationalization)
+- [🚀 Quick Start](#-quick-start)
+  - [Prerequisites](#prerequisites)
+  - [Installation](#installation)
+  - [Running](#running)
+  - [Build](#build)
+- [📖 Usage Guide](#-usage-guide)
+  - [Authentication Methods](#authentication-methods)
+- [🏗️ Project Structure](#-project-structure)
+- [🔧 Tech Stack](#-tech-stack)
+- [⚠️ Security Tips](#-security-tips)
+- [📝 Development](#-development)
+- [🤝 Contributing](#-contributing)
+- [📄 License](#-license)
+- [🔗 Related Links](#-related-links)
+- [💬 Contact](#-contact)
 
 ---
 
@@ -153,6 +197,13 @@ npm run type-check
 ## 🤝 Contributing
 
 Issues and Pull Requests are welcome!
+
+## 💬 Contact
+
+- **Official Website**: https://fnzero.dev/
+- **Project Repository**: https://github.com/0xfnzero/sol-safekey-ui
+- **Telegram Group**: https://t.me/fnzero_group
+- **Discord**: https://discord.gg/vuazbGkqQE
 
 ## 📄 License
 

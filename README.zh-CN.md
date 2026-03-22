@@ -1,14 +1,58 @@
-# Sol SafeKey UI
-
 <div align="center">
-
-![Sol SafeKey UI](https://img.shields.io/badge/Solana-SafeKey%20UI-purple?style=for-the-badge&logo=solana)
-
-完整的 Solana 钱包管理工具，提供高级安全功能和 18+ 种专业操作
-
-[English](./README.md) | 简体中文
-
+    <h1>🔐 Sol SafeKey UI</h1>
+    <h3><em>安全的基于 Web 的 Solana 钱包管理界面</em></h3>
 </div>
+
+<p align="center">
+    <strong>一个全面的、安全的 Solana 钱包管理 Web 界面，提供 18+ 种专业操作。使用 Next.js 构建，具有高级安全功能，包括 2FA/3FA 认证、Keystore 文件支持，以及与 sol-safekey 后端的无缝集成。</strong>
+</p>
+
+<p align="center">
+    <a href="https://github.com/0xfnzero/sol-safekey-ui/blob/main/LICENSE">
+        <img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="License">
+    </a>
+    <a href="https://github.com/0xfnzero/sol-safekey-ui">
+        <img src="https://img.shields.io/github/stars/0xfnzero/sol-safekey-ui?style=social" alt="GitHub stars">
+    </a>
+    <a href="https://github.com/0xfnzero/sol-safekey-ui/network">
+        <img src="https://img.shields.io/github/forks/0xfnzero/sol-safekey-ui?style=social" alt="GitHub forks">
+    </a>
+</p>
+
+<p align="center">
+    <img src="https://img.shields.io/badge/Next.js-000000?style=for-the-badge&logo=next.js&logoColor=white" alt="Next.js">
+    <img src="https://img.shields.io/badge/React-20232A?style=for-the-badge&logo=react&logoColor=61DAFB" alt="React">
+    <img src="https://img.shields.io/badge/Solana-9945FF?style=for-the-badge&logo=solana&logoColor=white" alt="Solana">
+    <img src="https://img.shields.io/badge/TypeScript-007ACC?style=for-the-badge&logo=typescript&logoColor=white" alt="TypeScript">
+</p>
+
+<p align="center">
+    <a href="https://github.com/0xfnzero/sol-safekey-ui/blob/main/README.zh-CN.md">中文</a> |
+    <a href="https://github.com/0xfnzero/sol-safekey-ui/blob/main/README.md">English</a> |
+    <a href="https://fnzero.dev/">官网</a> |
+    <a href="https://t.me/fnzero_group">Telegram</a> |
+    <a href="https://discord.gg/vuazbGkqQE">Discord</a>
+</p>
+
+## 📋 目录
+
+- [✨ 功能特性](#-功能特性)
+- [🌍 国际化](#-国际化)
+- [🚀 快速开始](#-快速开始)
+  - [前置要求](#-前置要求)
+  - [安装](#-安装)
+  - [运行](#-运行)
+  - [构建](#-构建)
+- [📖 使用说明](#-使用说明)
+  - [认证方式](#-认证方式)
+- [🏗️ 项目结构](#-项目结构)
+- [🔧 技术栈](#-技术栈)
+- [⚠️ 安全提示](#-安全提示)
+- [📝 开发](#-开发)
+- [🤝 贡献](#-贡献)
+- [📄 许可证](#-许可证)
+- [🔗 相关链接](#-相关链接)
+- [💬 联系方式](#-联系方式)
 
 ---
 
@@ -153,6 +197,13 @@ npm run type-check
 ## 🤝 贡献
 
 欢迎提交 Issue 和 Pull Request！
+
+## 💬 联系方式
+
+- **官方网站**: https://fnzero.dev/
+- **项目仓库**: https://github.com/0xfnzero/sol-safekey-ui
+- **Telegram 群组**: https://t.me/fnzero_group
+- **Discord**: https://discord.gg/vuazbGkqQE
 
 ## 📄 许可证
 
