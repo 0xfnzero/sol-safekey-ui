@@ -31,7 +31,11 @@ interface MenuItem {
 }
 
 interface FormState {
-  [key: string]: string | number;
+  [key: string]: string | number | undefined;
+}
+
+interface ApiRequestBody {
+  [key: string]: string | number | undefined;
 }
 
 const menuItems: MenuItem[] = [
@@ -142,7 +146,7 @@ export default function Home() {
     const formsWithAuthMethod = [
       "decrypt", "unlock", "get-pubkey", "transfer-sol", "transfer-token",
       "create-wsol-ata", "wrap-sol", "unwrap-sol", "close-wsol-ata",
-      "create-nonce", "pumpfun-sell", "pumpswap-sell"
+      "create-nonce", "pumpfun-sell", "pumpswap-sell", "create-tfa"
     ];
     if (formsWithAuthMethod.includes(formId)) {
       setAuthMethod({ ...authMethod, [formId]: "keystore" });
@@ -432,15 +436,22 @@ export default function Home() {
             }
           }
 
+          const requestBody: ApiRequestBody = {};
+
+          if (method === "keystore") {
+            requestBody.keystore_json = formData.keystoreJson;
+            requestBody.password = formData.password;
+          } else if (method === "encrypted") {
+            requestBody.encrypted_key = formData.encryptedKey;
+            requestBody.password = formData.password;
+          } else {
+            requestBody.secret_key = formData.secretKey;
+          }
+
           const response = await fetch(`${apiUrl}/wallet/get-pubkey`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              secret_key: formData.secretKey,
-              encrypted_key: formData.encryptedKey,
-              keystore_json: formData.keystoreJson,
-              password: formData.password,
-            }),
+            body: JSON.stringify(requestBody),
           });
           const data = await response.json();
 
@@ -473,16 +484,23 @@ export default function Home() {
             }
           }
 
+          const requestBody: ApiRequestBody = {
+            to_address: formData.to_address,
+            amount: parseFloat(formData.amount as string),
+            network: formData.network || "mainnet",
+          };
+
+          if (usingKeystore) {
+            requestBody.keystore_json = formData.keystoreJson;
+            requestBody.password = formData.password;
+          } else {
+            requestBody.private_key = formData.private_key;
+          }
+
           const response = await fetch(`${apiUrl}/transfer/sol`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              keystore_json: formData.keystoreJson,
-              password: formData.password,
-              to_address: formData.to_address,
-              amount: parseFloat(formData.amount as string),
-              network: formData.network || "mainnet",
-            }),
+            body: JSON.stringify(requestBody),
           });
           const data = await response.json();
 
@@ -515,18 +533,25 @@ export default function Home() {
             }
           }
 
+          const requestBody: ApiRequestBody = {
+            to_address: formData.to_address,
+            mint: formData.mint,
+            amount: parseFloat(formData.amount as string),
+            decimals: parseInt(formData.decimals as string) || 9,
+            network: formData.network || "mainnet",
+          };
+
+          if (usingKeystore) {
+            requestBody.keystore_json = formData.keystoreJson;
+            requestBody.password = formData.password;
+          } else {
+            requestBody.private_key = formData.private_key;
+          }
+
           const response = await fetch(`${apiUrl}/transfer/token`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              keystore_json: formData.keystoreJson,
-              password: formData.password,
-              to_address: formData.to_address,
-              mint: formData.mint,
-              amount: parseFloat(formData.amount as string),
-              decimals: parseInt(formData.decimals as string) || 9,
-              network: formData.network || "mainnet",
-            }),
+            body: JSON.stringify(requestBody),
           });
           const data = await response.json();
 
@@ -559,14 +584,21 @@ export default function Home() {
             }
           }
 
+          const requestBody: ApiRequestBody = {
+            network: formData.network || "mainnet",
+          };
+
+          if (usingKeystore) {
+            requestBody.keystore_json = formData.keystoreJson;
+            requestBody.password = formData.password;
+          } else {
+            requestBody.private_key = formData.private_key;
+          }
+
           const response = await fetch(`${apiUrl}/wsol/create-ata`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              keystore_json: formData.keystoreJson,
-              password: formData.password,
-              network: formData.network || "mainnet",
-            }),
+            body: JSON.stringify(requestBody),
           });
           const data = await response.json();
 
@@ -599,15 +631,22 @@ export default function Home() {
             }
           }
 
+          const requestBody: ApiRequestBody = {
+            amount: parseFloat(formData.amount as string),
+            network: formData.network || "mainnet",
+          };
+
+          if (usingKeystore) {
+            requestBody.keystore_json = formData.keystoreJson;
+            requestBody.password = formData.password;
+          } else {
+            requestBody.private_key = formData.private_key;
+          }
+
           const response = await fetch(`${apiUrl}/wsol/wrap`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              keystore_json: formData.keystoreJson,
-              password: formData.password,
-              amount: parseFloat(formData.amount as string),
-              network: formData.network || "mainnet",
-            }),
+            body: JSON.stringify(requestBody),
           });
           const data = await response.json();
 
@@ -640,14 +679,21 @@ export default function Home() {
             }
           }
 
+          const requestBody: ApiRequestBody = {
+            network: formData.network || "mainnet",
+          };
+
+          if (usingKeystore) {
+            requestBody.keystore_json = formData.keystoreJson;
+            requestBody.password = formData.password;
+          } else {
+            requestBody.private_key = formData.private_key;
+          }
+
           const response = await fetch(`${apiUrl}/wsol/unwrap`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              keystore_json: formData.keystoreJson,
-              password: formData.password,
-              network: formData.network || "mainnet",
-            }),
+            body: JSON.stringify(requestBody),
           });
           const data = await response.json();
 
@@ -680,14 +726,21 @@ export default function Home() {
             }
           }
 
+          const requestBody: ApiRequestBody = {
+            network: formData.network || "mainnet",
+          };
+
+          if (usingKeystore) {
+            requestBody.keystore_json = formData.keystoreJson;
+            requestBody.password = formData.password;
+          } else {
+            requestBody.private_key = formData.private_key;
+          }
+
           const response = await fetch(`${apiUrl}/nonce/create`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              keystore_json: formData.keystoreJson,
-              password: formData.password,
-              network: formData.network || "mainnet",
-            }),
+            body: JSON.stringify(requestBody),
           });
           const data = await response.json();
 
@@ -737,24 +790,43 @@ export default function Home() {
         }
 
         case "create-tfa": {
-          if (!formData.private_key || !formData.totp_secret || !formData.hardware_fingerprint ||
-              !formData.master_password || formData.question_index === undefined || !formData.security_answer) {
-            toast.error("请填写所有字段");
-            setLoading(false);
-            return;
+          const usingKeystore = !!formData.keystoreJson;
+
+          if (usingKeystore) {
+            if (!formData.keystoreJson || !formData.password || !formData.totp_secret || !formData.hardware_fingerprint ||
+                !formData.master_password || formData.question_index === undefined || !formData.security_answer) {
+              toast.error("请填写所有字段");
+              setLoading(false);
+              return;
+            }
+          } else {
+            if (!formData.private_key || !formData.totp_secret || !formData.hardware_fingerprint ||
+                !formData.master_password || formData.question_index === undefined || !formData.security_answer) {
+              toast.error("请填写所有字段");
+              setLoading(false);
+              return;
+            }
+          }
+
+          const requestBody: ApiRequestBody = {
+            totp_secret: formData.totp_secret,
+            hardware_fingerprint: formData.hardware_fingerprint,
+            master_password: formData.master_password,
+            question_index: formData.question_index,
+            security_answer: formData.security_answer,
+          };
+
+          if (usingKeystore) {
+            requestBody.keystore_json = formData.keystoreJson;
+            requestBody.password = formData.password;
+          } else {
+            requestBody.private_key = formData.private_key;
           }
 
           const response = await fetch(`${apiUrl}/2fa/create-tfa`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              private_key: formData.private_key,
-              totp_secret: formData.totp_secret,
-              hardware_fingerprint: formData.hardware_fingerprint,
-              master_password: formData.master_password,
-              question_index: formData.question_index,
-              security_answer: formData.security_answer,
-            }),
+            body: JSON.stringify(requestBody),
           });
           const data = await response.json();
 
@@ -821,14 +893,21 @@ export default function Home() {
             }
           }
 
+          const requestBody: ApiRequestBody = {
+            network: formData.network || "mainnet",
+          };
+
+          if (usingKeystore) {
+            requestBody.keystore_json = formData.keystoreJson;
+            requestBody.password = formData.password;
+          } else {
+            requestBody.private_key = formData.private_key;
+          }
+
           const response = await fetch(`${apiUrl}/wsol/close-ata`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              keystore_json: formData.keystoreJson,
-              password: formData.password,
-              network: formData.network || "mainnet",
-            }),
+            body: JSON.stringify(requestBody),
           });
           const data = await response.json();
 
@@ -860,17 +939,24 @@ export default function Home() {
             }
           }
 
+          const requestBody: ApiRequestBody = {
+            mint: formData.mint,
+            amount: parseFloat(formData.amount as string),
+            slippage: formData.slippage ? Math.floor(parseFloat(formData.slippage as string) * 100) : 100,
+            network: formData.network || "mainnet",
+          };
+
+          if (usingKeystore) {
+            requestBody.keystore_json = formData.keystoreJson;
+            requestBody.password = formData.password;
+          } else {
+            requestBody.private_key = formData.private_key;
+          }
+
           const response = await fetch(`${apiUrl}/pumpfun/sell`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              keystore_json: formData.keystoreJson,
-              password: formData.password,
-              mint: formData.mint,
-              amount: parseFloat(formData.amount as string),
-              slippage: formData.slippage ? Math.floor(parseFloat(formData.slippage as string) * 100) : 100,
-              network: formData.network || "mainnet",
-            }),
+            body: JSON.stringify(requestBody),
           });
           const data = await response.json();
 
@@ -902,17 +988,24 @@ export default function Home() {
             }
           }
 
+          const requestBody: ApiRequestBody = {
+            mint: formData.mint,
+            amount: parseFloat(formData.amount as string),
+            slippage: formData.slippage ? Math.floor(parseFloat(formData.slippage as string) * 100) : 100,
+            network: formData.network || "mainnet",
+          };
+
+          if (usingKeystore) {
+            requestBody.keystore_json = formData.keystoreJson;
+            requestBody.password = formData.password;
+          } else {
+            requestBody.private_key = formData.private_key;
+          }
+
           const response = await fetch(`${apiUrl}/pumpswap/sell`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              keystore_json: formData.keystoreJson,
-              password: formData.password,
-              mint: formData.mint,
-              amount: parseFloat(formData.amount as string),
-              slippage: formData.slippage ? Math.floor(parseFloat(formData.slippage as string) * 100) : 100,
-              network: formData.network || "mainnet",
-            }),
+            body: JSON.stringify(requestBody),
           });
           const data = await response.json();
 
@@ -945,15 +1038,22 @@ export default function Home() {
             }
           }
 
+          const requestBody: ApiRequestBody = {
+            network: formData.network || "mainnet",
+          };
+
+          if (usingKeystore) {
+            requestBody.keystore_json = formData.keystoreJson;
+            requestBody.password = formData.password;
+          } else {
+            requestBody.private_key = formData.private_key;
+          }
+
           const apiUrlPath = formId === "pumpfun-cashback" ? "/pumpfun/cashback" : "/pumpswap/cashback";
           const response = await fetch(`${apiUrl}${apiUrlPath}`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              keystore_json: formData.keystoreJson,
-              password: formData.password,
-              network: formData.network || "mainnet",
-            }),
+            body: JSON.stringify(requestBody),
           });
           const data = await response.json();
 
@@ -2870,15 +2970,79 @@ export default function Home() {
         return (
           <div className="space-y-4">
             <div>
-              <label className="block text-sm font-medium mb-2">私钥</label>
-              <input
-                type="password"
-                value={formData.private_key || ""}
-                onChange={(e) => handleFormChange("private_key", e.target.value)}
-                className="w-full px-4 py-2 bg-white/5 border border-white/10 rounded-lg focus:outline-none focus:ring-2 focus:ring-white/20 text-white"
-                placeholder="输入要加密的私钥"
-              />
+              <label className="block text-sm font-medium mb-2">认证方式</label>
+              <div className="flex gap-2">
+                <button
+                  onClick={() => {
+                    setAuthMethod({ ...authMethod, [selectedForm || ""]: "keystore" });
+                    const newFormData = { ...formData };
+                    delete newFormData.private_key;
+                    setFormData(newFormData);
+                  }}
+                  className={`flex-1 py-2 px-4 rounded-lg font-medium transition-colors ${
+                    authMethod[selectedForm || ""] === "keystore"
+                      ? "bg-gradient-to-r from-purple-500 to-pink-500 text-white"
+                      : "bg-white/5 text-gray-400 hover:bg-white/10"
+                  }`}
+                >
+                  📁 Keystore 文件（推荐）
+                </button>
+                <button
+                  onClick={() => {
+                    setAuthMethod({ ...authMethod, [selectedForm || ""]: "private" });
+                    const newFormData = { ...formData };
+                    delete newFormData.keystoreJson;
+                    delete newFormData.password;
+                    setFormData(newFormData);
+                  }}
+                  className={`flex-1 py-2 px-4 rounded-lg font-medium transition-colors ${
+                    authMethod[selectedForm || ""] === "private"
+                      ? "bg-gradient-to-r from-purple-500 to-pink-500 text-white"
+                      : "bg-white/5 text-gray-400 hover:bg-white/10"
+                  }`}
+                >
+                  🔑 私钥
+                </button>
+              </div>
             </div>
+
+            {authMethod[selectedForm || ""] === "keystore" ? (
+              <>
+                <div>
+                  <label className="block text-sm font-medium mb-2">上传 Keystore 文件</label>
+                  <input
+                    type="file"
+                    accept=".json"
+                    onChange={handleFileUpload}
+                    className="w-full px-4 py-2 bg-white/5 border border-white/10 rounded-lg focus:outline-none focus:ring-2 focus:ring-white/20 text-white file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:bg-white/10 file:text-white hover:file:bg-white/20"
+                  />
+                  {formData.keystoreJson && (
+                    <p className="mt-2 text-xs text-green-400">✓ 文件已上传</p>
+                  )}
+                </div>
+                <div>
+                  <label className="block text-sm font-medium mb-2">密码</label>
+                  <input
+                    type="password"
+                    value={formData.password || ""}
+                    onChange={(e) => handleFormChange("password", e.target.value)}
+                    className="w-full px-4 py-2 bg-white/5 border border-white/10 rounded-lg focus:outline-none focus:ring-2 focus:ring-white/20 text-white"
+                    placeholder="输入 keystore 密码"
+                  />
+                </div>
+              </>
+            ) : (
+              <div>
+                <label className="block text-sm font-medium mb-2">私钥</label>
+                <input
+                  type="password"
+                  value={formData.private_key || ""}
+                  onChange={(e) => handleFormChange("private_key", e.target.value)}
+                  className="w-full px-4 py-2 bg-white/5 border border-white/10 rounded-lg focus:outline-none focus:ring-2 focus:ring-white/20 text-white"
+                  placeholder="输入要加密的私钥"
+                />
+              </div>
+            )}
             <div>
               <label className="block text-sm font-medium mb-2">TOTP 密钥</label>
               <input
