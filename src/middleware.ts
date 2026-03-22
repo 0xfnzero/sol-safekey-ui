@@ -5,6 +5,7 @@ export default createMiddleware({
   locales,
   defaultLocale,
   localePrefix: 'always', // Show locale in URL for all languages
+  localeDetection: false, // Disable automatic browser language detection
 });
 
 export const config = {
