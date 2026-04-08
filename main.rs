@@ -755,13 +755,33 @@ async fn pumpswap_cashback(Json(req): Json<PumpswapCashbackRequest>) -> Result<J
 
 async fn serve_assets(uri: Uri) -> impl IntoResponse {
     let path = uri.path();
-    let path_to_serve = if path == "/" { "index.html" } else { &path[1..] };
-    match Assets::get(path_to_serve) {
+    tracing::info!("Serving asset: {}", path);
+    
+    // URL decode the path to handle encoded characters like %5B -> [ and %5D -> ]
+    let decoded_path = match urlencoding::decode(path) {
+        Ok(decoded) => decoded.to_string(),
+        Err(e) => {
+            tracing::warn!("Failed to decode path: {}, error: {}", path, e);
+            path.to_string()
+        }
+    };
+    
+    let path_to_serve = if decoded_path == "/" { 
+        "index.html".to_string() 
+    } else { 
+        decoded_path.trim_start_matches('/').to_string() 
+    };
+    
+    tracing::info!("Looking for asset: {}", path_to_serve);
+    
+    match Assets::get(&path_to_serve) {
         Some(content) => {
-            let mime = mime_guess::from_path(path_to_serve).first_or_octet_stream().to_string();
+            let mime = mime_guess::from_path(&path_to_serve).first_or_octet_stream().to_string();
+            tracing::info!("Found asset: {}, mime: {}", path_to_serve, mime);
             Response::builder().status(StatusCode::OK).header("Content-Type", mime).body(Body::from(content.data.to_vec())).unwrap()
         }
         None => {
+            tracing::warn!("Asset not found: {}, falling back to index.html", path_to_serve);
             if let Some(index) = Assets::get("index.html") {
                 Response::builder().status(StatusCode::OK).header("Content-Type", "text/html").body(Body::from(index.data.to_vec())).unwrap()
             } else {

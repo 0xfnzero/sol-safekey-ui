@@ -8,7 +8,7 @@ name = "sol-safekey-ui"
 path = "main.rs"
 
 [dependencies]
-sol-safekey = { path = "./sol-safekey", features = ["solana-ops", "2fa", "sol-trade-sdk"] }
+sol-safekey = { path = "../sol-safekey", features = ["solana-ops", "2fa", "sol-trade-sdk"] }
 solana-client = "3.1"
 solana-sdk = "3.0"
 axum = "0.8"
@@ -23,3 +23,4 @@ anyhow = "1.0"
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 spl-token = "6.0"
+urlencoding = "2.1"
