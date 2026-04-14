@@ -109,13 +109,7 @@
 - **Node.js** 18+
 - **npm** 或 **yarn**
 - **Rust**（stable）— 运行 HTTP API（`cargo run`）和 Tauri 桌面壳都需要
-- **sol-safekey** 与本仓库**同级目录**：根目录 `Cargo.toml` 使用 `path = "../sol-safekey"`，请把 [sol-safekey](https://github.com/0xfnzero/sol-safekey) 克隆到上一级目录，例如：
-
-  ```
-  你的工作目录/
-    sol-safekey/      # 依赖库
-    sol-safekey-ui/   # 本仓库
-  ```
+- **sol-safekey**（Rust 库）通过 `Cargo.toml` 从 **[crates.io](https://crates.io/crates/sol-safekey)** 拉取，**无需**在本地单独克隆该仓库。
 
 - **仅桌面端：** 还需满足 [Tauri 2 环境要求](https://v2.tauri.app/start/prerequisites/)（系统编译器、WebView 等）
 

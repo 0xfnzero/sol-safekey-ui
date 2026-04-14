@@ -54,7 +54,7 @@
 ### 开发模式（npm，推荐）
 
 - **前端**：默认 **3840**；**API**：**3841**。
-- 需同级目录存在 **`../sol-safekey`**（见 `Cargo.toml`）。
+- Rust 依赖 **sol-safekey** 来自 **crates.io**（见根目录 `Cargo.toml`），无需本地克隆。
 
 | 场景 | 命令 | 说明 |
 |------|------|------|
@@ -225,7 +225,6 @@ sol-safekey-ui/
 │   ├── app/               # App 路由页面
 │   └── components/        # React 组件
 │       └── ui/            # shadcn/ui 组件
-├── sol-safekey/           # sol-safekey 库（子模块）
 ├── main.rs                # Rust 后端入口
 ├── Cargo.toml             # Rust 依赖
 ├── package.json           # Node.js 依赖

@@ -8,7 +8,7 @@ name = "sol-safekey-ui"
 path = "main.rs"
 
 [dependencies]
-sol-safekey = { path = "../sol-safekey", features = ["solana-ops", "2fa", "sol-trade-sdk"] }
+sol-safekey = { version = "0.1.7", features = ["solana-ops", "2fa", "sol-trade-sdk"] }
 solana-client = "3.1"
 solana-sdk = "3.0"
 axum = "0.8"

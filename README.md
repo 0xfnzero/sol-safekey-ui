@@ -109,13 +109,7 @@
 - **Node.js** 18+
 - **npm** or **yarn**
 - **Rust** (stable) — required for the HTTP API (`cargo run`) and the Tauri desktop shell
-- **sol-safekey** as a **sibling folder**: this repo’s `Cargo.toml` depends on `../sol-safekey`. Clone it next to this project, for example:
-
-  ```
-  your-workspace/
-    sol-safekey/      # dependency (Rust library)
-    sol-safekey-ui/   # this repository
-  ```
+- **sol-safekey** (Rust library) is pulled from **[crates.io](https://crates.io/crates/sol-safekey)** via `Cargo.toml` — no local clone required.
 
 - **Desktop only:** satisfy [Tauri 2 prerequisites](https://v2.tauri.app/start/prerequisites/) (OS-specific compiler, WebView, etc.)
 
