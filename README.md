@@ -106,40 +106,65 @@
 
 ### Prerequisites
 
-- Node.js 18+
-- npm or yarn
-- Backend API service running on `http://localhost:3001`
+- **Node.js** 18+
+- **npm** or **yarn**
+- **Rust** (stable) — required for the HTTP API (`cargo run`) and the Tauri desktop shell
+- **sol-safekey** as a **sibling folder**: this repo’s `Cargo.toml` depends on `../sol-safekey`. Clone it next to this project, for example:
+
+  ```
+  your-workspace/
+    sol-safekey/      # dependency (Rust library)
+    sol-safekey-ui/   # this repository
+  ```
+
+- **Desktop only:** satisfy [Tauri 2 prerequisites](https://v2.tauri.app/start/prerequisites/) (OS-specific compiler, WebView, etc.)
 
 ### Installation
 
 ```bash
-# Clone the repository
 git clone https://github.com/0xfnzero/sol-safekey-ui.git
 cd sol-safekey-ui
-
-# Install dependencies
 npm install
 ```
 
-### Running
+### Running — Web (browser)
+
+Default ports: **Next.js UI = 3840**, **Rust API = 3841**.
+
+| Goal | Command | Then open |
+|------|---------|-----------|
+| **UI only** (no API; wallet actions will fail until the API runs) | `npm run dev` | `http://localhost:3840/en/` or `http://localhost:3840/zh/` |
+| **UI + API** (recommended for local development) | `npm run dev:stack` | Same URLs as above; `/api/*` is proxied to `http://127.0.0.1:3841` |
+| **API only** (e.g. Next already running elsewhere) | `npm run backend` | Ensure something is still serving the UI on 3840 if you use the browser |
+
+### Running — Desktop (Tauri)
 
 ```bash
-# Start development server
-npm run dev
-
-# Open in browser
-open http://localhost:3000
+npm run desktop:dev
 ```
 
-### Build
+This starts the same stack as `dev:stack` (Next + API) via Tauri’s `beforeDevCommand`, then opens the native window.
+
+- **Release build / installer:** `npm run desktop:build` (artifacts under `src-tauri/target/` and OS-specific bundles).
+
+### Build (static export)
 
 ```bash
-# Production build
 npm run build
-
-# Start production server
-npm start
 ```
+
+Output goes to `out/` (used by the embedded Rust server and Tauri).
+
+### Pushing to GitHub
+
+```bash
+git add .
+git status
+git commit -m "chore: your message"
+git push origin main
+```
+
+Replace `main` with your branch name if different.
 
 ## 📖 Usage Guide
 

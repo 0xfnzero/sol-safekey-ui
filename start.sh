@@ -6,7 +6,7 @@ set -e
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PID_FILE="$SCRIPT_DIR/sol-safekey-ui.pid"
-PORT=3001
+PORT=3841
 
 # Function to stop the server
 stop_server() {
@@ -70,8 +70,8 @@ case "${1:-start}" in
         # Trap Ctrl+C to clean up PID file
         trap 'rm -f "$PID_FILE"; echo ""; echo "🛑 Server stopped"; exit 0' SIGINT SIGTERM
         
-        # Start server and save PID
-        ./target/release/sol-safekey-ui &
+        # Start server and save PID (PORT is read by the binary)
+        PORT=$PORT ./target/release/sol-safekey-ui &
         SERVER_PID=$!
         echo $SERVER_PID > "$PID_FILE"
         

@@ -23,6 +23,8 @@ import {
   X,
 } from "lucide-react";
 import LanguageSwitcher from '@/components/LanguageSwitcher';
+import { DEFAULT_API_PORT } from "@/lib/api";
+import { apiFetch } from "@/lib/apiFetch";
 
 interface MenuItem {
   id: string;
@@ -161,10 +163,10 @@ export default function Home() {
     try {
       await navigator.clipboard.writeText(text);
       setCopied(id);
-      toast.success("已复制到剪贴板");
+      toast.success(t("common.copiedToClipboard"));
       setTimeout(() => setCopied(null), 2000);
     } catch {
-      toast.error("复制失败");
+      toast.error(t("errors.copyFailed"));
     }
   };
 
@@ -178,7 +180,7 @@ export default function Home() {
     a.click();
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
-    toast.success(`已下载 ${filename}`);
+    toast.success(t("common.downloaded", { filename }));
   };
 
   const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -188,20 +190,19 @@ export default function Home() {
       reader.onload = (e) => {
         const content = e.target?.result as string;
         handleFormChange("keystoreJson", content);
-        toast.success("文件上传成功");
+        toast.success(t("features.import-keystore.fileUploaded"));
       };
       reader.readAsText(file);
     }
   };
 
   const handleSubmit = async (formId: string) => {
-    const apiUrl = "http://localhost:3001/api";
     setLoading(true);
 
     try {
       switch (formId) {
         case "create-plain": {
-          const response = await fetch(`${apiUrl}/keys/create`, {
+          const response = await apiFetch("keys/create", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ name: formData.name || "default" }),
@@ -209,14 +210,14 @@ export default function Home() {
           const data = await response.json();
 
           if (response.ok) {
-            toast.success("创建成功！");
+            toast.success(t("features.create-plain.success"));
             setFormData((prev) => ({
               ...prev,
               publicKey: data.public_key,
               secretKey: data.secret_key,
             }));
           } else {
-            toast.error(data.error || "创建失败");
+            toast.error(data.error || t("errors.createFailed"));
           }
           break;
         }
@@ -224,30 +225,30 @@ export default function Home() {
         case "create-encrypted": {
           const password = String(formData.password || "");
           if (password.length < 10 || password.length > 20) {
-            toast.error("密码长度必须在10-20字符之间");
+            toast.error(t("errors.passwordLength"));
             setLoading(false);
             return;
           }
 
-          const createResponse = await fetch(`${apiUrl}/keys/create`, {
+          const createResponse = await apiFetch("keys/create", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({}),
           });
 
           if (!createResponse.ok) {
-            const errorData = await createResponse.json().catch(() => ({ error: "未知错误" }));
-            toast.error(errorData.error || "创建失败");
+            const errorData = await createResponse.json().catch(() => ({ error: t("errors.unknownError") }));
+            toast.error(errorData.error || t("errors.createFailed"));
             break;
           }
 
           const createData = await createResponse.json();
           if (!createData.secret_key) {
-            toast.error("创建密钥失败：未返回secret_key");
+            toast.error(t("features.create-encrypted.createKeyFailed"));
             break;
           }
 
-          const encryptResponse = await fetch(`${apiUrl}/keys/encrypt`, {
+          const encryptResponse = await apiFetch("keys/encrypt", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
@@ -258,27 +259,27 @@ export default function Home() {
 
           if (encryptResponse.ok) {
             const encryptData = await encryptResponse.json();
-            toast.success("加密成功！");
+            toast.success(t("features.create-encrypted.success"));
             setFormData((prev) => ({
               ...prev,
               publicKey: createData.public_key,
               encryptedKey: encryptData.encrypted_key,
             }));
           } else {
-            const errorData = await encryptResponse.json().catch(() => ({ error: "未知错误" }));
-            toast.error(errorData.error || "加密失败");
+            const errorData = await encryptResponse.json().catch(() => ({ error: t("errors.unknownError") }));
+            toast.error(errorData.error || t("features.create-encrypted.encryptFailed"));
           }
           break;
         }
 
         case "create-keystore": {
           if (!formData.password || String(formData.password).length < 10) {
-            toast.error("请输入10-20字符的密码");
+            toast.error(t("features.create-keystore.passwordError"));
             setLoading(false);
             return;
           }
 
-          const response = await fetch(`${apiUrl}/keys/create-keystore`, {
+          const response = await apiFetch("keys/create-keystore", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ password: formData.password }),
@@ -286,26 +287,26 @@ export default function Home() {
           const data = await response.json();
 
           if (response.ok) {
-            toast.success("Keystore文件创建成功！");
+            toast.success(t("features.create-keystore.success"));
             setFormData((prev) => ({
               ...prev,
               publicKey: data.public_key,
               keystoreJson: data.keystore_json,
             }));
           } else {
-            toast.error(data.error || "创建失败");
+            toast.error(data.error || t("errors.createFailed"));
           }
           break;
         }
 
         case "import-keystore": {
           if (!formData.keystoreJson || !formData.password) {
-            toast.error("请填写所有字段");
+            toast.error(t("features.import-keystore.fillAllFields"));
             setLoading(false);
             return;
           }
 
-          const response = await fetch(`${apiUrl}/keys/import-keystore`, {
+          const response = await apiFetch("keys/import-keystore", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
@@ -316,26 +317,26 @@ export default function Home() {
           const data = await response.json();
 
           if (response.ok) {
-            toast.success("导入成功！");
+            toast.success(t("features.import-keystore.success"));
             setFormData((prev) => ({
               ...prev,
               publicKey: data.public_key,
               secretKey: data.secret_key,
             }));
           } else {
-            toast.error(data.error || "导入失败");
+            toast.error(data.error || t("features.import-keystore.error"));
           }
           break;
         }
 
         case "decrypt": {
           if (!formData.encrypted_key || !formData.password) {
-            toast.error("请填写所有字段");
+            toast.error(t("features.decrypt.fillAllFields"));
             setLoading(false);
             return;
           }
 
-          const response = await fetch(`${apiUrl}/keys/decrypt`, {
+          const response = await apiFetch("keys/decrypt", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
@@ -346,25 +347,25 @@ export default function Home() {
           const data = await response.json();
 
           if (response.ok) {
-            toast.success("解密成功！");
+            toast.success(t("features.decrypt.success"));
             setFormData((prev) => ({
               ...prev,
               secretKey: data.secret_key,
             }));
           } else {
-            toast.error(data.error || "解密失败");
+            toast.error(data.error || t("features.decrypt.error"));
           }
           break;
         }
 
         case "unlock": {
           if (!formData.keystoreJson || !formData.password) {
-            toast.error("请填写所有字段");
+            toast.error(t("features.unlock.fillAllFields"));
             setLoading(false);
             return;
           }
 
-          const response = await fetch(`${apiUrl}/wallet/unlock`, {
+          const response = await apiFetch("wallet/unlock", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
@@ -375,26 +376,26 @@ export default function Home() {
           const data = await response.json();
 
           if (response.ok) {
-            toast.success("钱包解锁成功！");
+            toast.success(t("features.unlock.success"));
             setFormData((prev) => ({
               ...prev,
               publicKey: data.public_key,
               secretKey: data.secret_key,
             }));
           } else {
-            toast.error(data.error || "解锁失败");
+            toast.error(data.error || t("features.unlock.error"));
           }
           break;
         }
 
         case "check-balance": {
           if (!formData.address) {
-            toast.error("请输入钱包地址");
+            toast.error(t("features.check-balance.enterAddress"));
             setLoading(false);
             return;
           }
 
-          const response = await fetch(`${apiUrl}/wallet/balance`, {
+          const response = await apiFetch("wallet/balance", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
@@ -405,14 +406,19 @@ export default function Home() {
           const data = await response.json();
 
           if (response.ok) {
-            toast.success(`余额: ${data.balance} SOL (${data.network})`);
+            toast.success(
+              t("features.check-balance.success", {
+                balance: data.balance,
+                network: data.network,
+              }),
+            );
             setFormData((prev) => ({
               ...prev,
               balance: data.balance.toString(),
               network: data.network,
             }));
           } else {
-            toast.error(data.error || "查询失败");
+            toast.error(data.error || t("features.check-balance.error"));
           }
           break;
         }
@@ -422,19 +428,19 @@ export default function Home() {
 
           if (method === "keystore") {
             if (!formData.keystoreJson || !formData.password) {
-              toast.error("请上传 keystore 文件并输入密码");
+              toast.error(t("features.get-pubkey.uploadKeystore"));
               setLoading(false);
               return;
             }
           } else if (method === "encrypted") {
             if (!formData.encryptedKey || !formData.password) {
-              toast.error("请输入加密私钥和密码");
+              toast.error(t("features.get-pubkey.enterEncrypted"));
               setLoading(false);
               return;
             }
           } else {
             if (!formData.secretKey) {
-              toast.error("请输入私钥");
+              toast.error(t("features.get-pubkey.enterPrivateKey"));
               setLoading(false);
               return;
             }
@@ -452,7 +458,7 @@ export default function Home() {
             requestBody.secret_key = formData.secretKey;
           }
 
-          const response = await fetch(`${apiUrl}/wallet/get-pubkey`, {
+          const response = await apiFetch("wallet/get-pubkey", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify(requestBody),
@@ -460,13 +466,13 @@ export default function Home() {
           const data = await response.json();
 
           if (response.ok) {
-            toast.success("获取成功！");
+            toast.success(t("features.get-pubkey.success"));
             setFormData((prev) => ({
               ...prev,
               publicKey: data.public_key,
             }));
           } else {
-            toast.error(data.error || "获取失败");
+            toast.error(data.error || t("features.get-pubkey.error"));
           }
           break;
         }
@@ -476,13 +482,13 @@ export default function Home() {
           const usingKeystore = !!formData.keystoreJson;
           if (usingKeystore) {
             if (!formData.keystoreJson || !formData.password || !formData.to_address || !formData.amount) {
-              toast.error("请填写所有字段");
+              toast.error(t("features.transfer-sol.fillAllFields"));
               setLoading(false);
               return;
             }
           } else {
             if (!formData.private_key || !formData.to_address || !formData.amount) {
-              toast.error("请填写所有字段");
+              toast.error(t("features.transfer-sol.fillAllFields"));
               setLoading(false);
               return;
             }
@@ -501,7 +507,7 @@ export default function Home() {
             requestBody.private_key = formData.private_key;
           }
 
-          const response = await fetch(`${apiUrl}/transfer/sol`, {
+          const response = await apiFetch("transfer/sol", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify(requestBody),
@@ -509,13 +515,13 @@ export default function Home() {
           const data = await response.json();
 
           if (response.ok) {
-            toast.success(`转账成功！签名: ${data.signature}`);
+            toast.success(t("features.transfer-sol.success", { signature: data.signature }));
             setFormData((prev) => ({
               ...prev,
               signature: data.signature,
             }));
           } else {
-            toast.error(data.error || "转账失败");
+            toast.error(data.error || t("features.transfer-sol.error"));
           }
           break;
         }
@@ -525,13 +531,13 @@ export default function Home() {
           const usingKeystore = !!formData.keystoreJson;
           if (usingKeystore) {
             if (!formData.keystoreJson || !formData.password || !formData.to_address || !formData.mint || !formData.amount) {
-              toast.error("请填写所有字段");
+              toast.error(t("features.transfer-token.fillAllFields"));
               setLoading(false);
               return;
             }
           } else {
             if (!formData.private_key || !formData.to_address || !formData.mint || !formData.amount) {
-              toast.error("请填写所有字段");
+              toast.error(t("features.transfer-token.fillAllFields"));
               setLoading(false);
               return;
             }
@@ -552,7 +558,7 @@ export default function Home() {
             requestBody.private_key = formData.private_key;
           }
 
-          const response = await fetch(`${apiUrl}/transfer/token`, {
+          const response = await apiFetch("transfer/token", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify(requestBody),
@@ -560,13 +566,13 @@ export default function Home() {
           const data = await response.json();
 
           if (response.ok) {
-            toast.success(`转账成功！签名: ${data.signature}`);
+            toast.success(t("features.transfer-token.success", { signature: data.signature }));
             setFormData((prev) => ({
               ...prev,
               signature: data.signature,
             }));
           } else {
-            toast.error(data.error || "转账失败");
+            toast.error(data.error || t("features.transfer-token.error"));
           }
           break;
         }
@@ -576,13 +582,13 @@ export default function Home() {
           const usingKeystore = !!formData.keystoreJson;
           if (usingKeystore) {
             if (!formData.keystoreJson || !formData.password) {
-              toast.error("请上传 keystore 文件并输入密码");
+              toast.error(t("features.create-wsol-ata.uploadKeystore"));
               setLoading(false);
               return;
             }
           } else {
             if (!formData.private_key) {
-              toast.error("请输入私钥");
+              toast.error(t("features.create-wsol-ata.enterPrivateKey"));
               setLoading(false);
               return;
             }
@@ -599,7 +605,7 @@ export default function Home() {
             requestBody.private_key = formData.private_key;
           }
 
-          const response = await fetch(`${apiUrl}/wsol/create-ata`, {
+          const response = await apiFetch("wsol/create-ata", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify(requestBody),
@@ -607,13 +613,13 @@ export default function Home() {
           const data = await response.json();
 
           if (response.ok) {
-            toast.success(`创建成功！签名: ${data.signature}`);
+            toast.success(t("features.create-wsol-ata.success", { signature: data.signature }));
             setFormData((prev) => ({
               ...prev,
               signature: data.signature,
             }));
           } else {
-            toast.error(data.error || "创建失败");
+            toast.error(data.error || t("features.create-wsol-ata.error"));
           }
           break;
         }
@@ -623,13 +629,13 @@ export default function Home() {
           const usingKeystore = !!formData.keystoreJson;
           if (usingKeystore) {
             if (!formData.keystoreJson || !formData.password || !formData.amount) {
-              toast.error("请填写所有字段");
+              toast.error(t("features.wrap-sol.fillAllFields"));
               setLoading(false);
               return;
             }
           } else {
             if (!formData.private_key || !formData.amount) {
-              toast.error("请填写所有字段");
+              toast.error(t("features.wrap-sol.fillAllFields"));
               setLoading(false);
               return;
             }
@@ -647,7 +653,7 @@ export default function Home() {
             requestBody.private_key = formData.private_key;
           }
 
-          const response = await fetch(`${apiUrl}/wsol/wrap`, {
+          const response = await apiFetch("wsol/wrap", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify(requestBody),
@@ -655,13 +661,13 @@ export default function Home() {
           const data = await response.json();
 
           if (response.ok) {
-            toast.success(`封装成功！签名: ${data.signature}`);
+            toast.success(t("features.wrap-sol.success", { signature: data.signature }));
             setFormData((prev) => ({
               ...prev,
               signature: data.signature,
             }));
           } else {
-            toast.error(data.error || "封装失败");
+            toast.error(data.error || t("features.wrap-sol.error"));
           }
           break;
         }
@@ -671,13 +677,13 @@ export default function Home() {
           const usingKeystore = !!formData.keystoreJson;
           if (usingKeystore) {
             if (!formData.keystoreJson || !formData.password) {
-              toast.error("请上传 keystore 文件并输入密码");
+              toast.error(t("features.unwrap-sol.uploadKeystore"));
               setLoading(false);
               return;
             }
           } else {
             if (!formData.private_key) {
-              toast.error("请输入私钥");
+              toast.error(t("features.unwrap-sol.enterPrivateKey"));
               setLoading(false);
               return;
             }
@@ -694,7 +700,7 @@ export default function Home() {
             requestBody.private_key = formData.private_key;
           }
 
-          const response = await fetch(`${apiUrl}/wsol/unwrap`, {
+          const response = await apiFetch("wsol/unwrap", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify(requestBody),
@@ -702,13 +708,13 @@ export default function Home() {
           const data = await response.json();
 
           if (response.ok) {
-            toast.success(`解封成功！签名: ${data.signature}`);
+            toast.success(t("features.unwrap-sol.success", { signature: data.signature }));
             setFormData((prev) => ({
               ...prev,
               signature: data.signature,
             }));
           } else {
-            toast.error(data.error || "解封失败");
+            toast.error(data.error || t("features.unwrap-sol.error"));
           }
           break;
         }
@@ -718,13 +724,13 @@ export default function Home() {
           const usingKeystore = !!formData.keystoreJson;
           if (usingKeystore) {
             if (!formData.keystoreJson || !formData.password) {
-              toast.error("请上传 keystore 文件并输入密码");
+              toast.error(t("features.create-nonce.uploadKeystore"));
               setLoading(false);
               return;
             }
           } else {
             if (!formData.private_key) {
-              toast.error("请输入私钥");
+              toast.error(t("features.create-nonce.enterPrivateKey"));
               setLoading(false);
               return;
             }
@@ -741,7 +747,7 @@ export default function Home() {
             requestBody.private_key = formData.private_key;
           }
 
-          const response = await fetch(`${apiUrl}/nonce/create`, {
+          const response = await apiFetch("nonce/create", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify(requestBody),
@@ -749,26 +755,26 @@ export default function Home() {
           const data = await response.json();
 
           if (response.ok) {
-            toast.success(`创建成功！签名: ${data.signature}`);
+            toast.success(t("features.create-nonce.success", { signature: data.signature }));
             setFormData((prev) => ({
               ...prev,
               nonceAccount: data.nonce_account,
               signature: data.signature,
             }));
           } else {
-            toast.error(data.error || "创建失败");
+            toast.error(data.error || t("features.create-nonce.error"));
           }
           break;
         }
 
         case "setup-2fa": {
           if (!formData.hardware_fingerprint || !formData.master_password) {
-            toast.error("请填写所有字段");
+            toast.error(t("features.setup-2fa.fillAllFields"));
             setLoading(false);
             return;
           }
 
-          const response = await fetch(`${apiUrl}/2fa/setup`, {
+          const response = await apiFetch("2fa/setup", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
@@ -781,14 +787,14 @@ export default function Home() {
           const data = await response.json();
 
           if (response.ok) {
-            toast.success("2FA 设置成功！");
+            toast.success(t("features.setup-2fa.success"));
             setFormData((prev) => ({
               ...prev,
               totp_secret: data.totp_secret,
               qr_code_url: data.qr_code_url,
             }));
           } else {
-            toast.error(data.error || "设置失败");
+            toast.error(data.error || t("features.setup-2fa.error"));
           }
           break;
         }
@@ -799,14 +805,14 @@ export default function Home() {
           if (usingKeystore) {
             if (!formData.keystoreJson || !formData.password || !formData.totp_secret || !formData.hardware_fingerprint ||
                 !formData.master_password || formData.question_index === undefined || !formData.security_answer) {
-              toast.error("请填写所有字段");
+              toast.error(t("features.create-tfa.fillAllFields"));
               setLoading(false);
               return;
             }
           } else {
             if (!formData.private_key || !formData.totp_secret || !formData.hardware_fingerprint ||
                 !formData.master_password || formData.question_index === undefined || !formData.security_answer) {
-              toast.error("请填写所有字段");
+              toast.error(t("features.create-tfa.fillAllFields"));
               setLoading(false);
               return;
             }
@@ -827,7 +833,7 @@ export default function Home() {
             requestBody.private_key = formData.private_key;
           }
 
-          const response = await fetch(`${apiUrl}/2fa/create-tfa`, {
+          const response = await apiFetch("2fa/create-tfa", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify(requestBody),
@@ -835,14 +841,14 @@ export default function Home() {
           const data = await response.json();
 
           if (response.ok) {
-            toast.success("三重钱包创建成功！");
+            toast.success(t("features.create-tfa.success"));
             setFormData((prev) => ({
               ...prev,
               encrypted_wallet: data.encrypted_wallet,
               publicKey: data.public_key,
             }));
           } else {
-            toast.error(data.error || "创建失败");
+            toast.error(data.error || t("features.create-tfa.error"));
           }
           break;
         }
@@ -850,12 +856,12 @@ export default function Home() {
         case "unlock-tfa": {
           if (!formData.encrypted_wallet || !formData.hardware_fingerprint || !formData.master_password ||
               !formData.security_answer || !formData.totp_code) {
-            toast.error("请填写所有字段");
+            toast.error(t("features.unlock-tfa.fillAllFields"));
             setLoading(false);
             return;
           }
 
-          const response = await fetch(`${apiUrl}/2fa/unlock-tfa`, {
+          const response = await apiFetch("2fa/unlock-tfa", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
@@ -869,14 +875,14 @@ export default function Home() {
           const data = await response.json();
 
           if (response.ok) {
-            toast.success("三重钱包解锁成功！");
+            toast.success(t("features.unlock-tfa.success"));
             setFormData((prev) => ({
               ...prev,
               private_key: data.private_key,
               publicKey: data.public_key,
             }));
           } else {
-            toast.error(data.error || "解锁失败");
+            toast.error(data.error || t("features.unlock-tfa.error"));
           }
           break;
         }
@@ -885,13 +891,13 @@ export default function Home() {
           const usingKeystore = !!formData.keystoreJson;
           if (usingKeystore) {
             if (!formData.keystoreJson || !formData.password) {
-              toast.error("请上传 keystore 文件并输入密码");
+              toast.error(t("features.close-wsol-ata.uploadKeystore"));
               setLoading(false);
               return;
             }
           } else {
             if (!formData.private_key) {
-              toast.error("请输入私钥");
+              toast.error(t("features.close-wsol-ata.enterPrivateKey"));
               setLoading(false);
               return;
             }
@@ -908,7 +914,7 @@ export default function Home() {
             requestBody.private_key = formData.private_key;
           }
 
-          const response = await fetch(`${apiUrl}/wsol/close-ata`, {
+          const response = await apiFetch("wsol/close-ata", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify(requestBody),
@@ -916,13 +922,13 @@ export default function Home() {
           const data = await response.json();
 
           if (response.ok) {
-            toast.success(`WSOL ATA 关闭成功！签名: ${data.signature}`);
+            toast.success(t("features.close-wsol-ata.success", { signature: data.signature }));
             setFormData((prev) => ({
               ...prev,
               signature: data.signature,
             }));
           } else {
-            toast.error(data.error || "关闭失败");
+            toast.error(data.error || t("features.close-wsol-ata.error"));
           }
           break;
         }
@@ -931,13 +937,13 @@ export default function Home() {
           const usingKeystore = !!formData.keystoreJson;
           if (usingKeystore) {
             if (!formData.keystoreJson || !formData.password || !formData.mint || !formData.amount) {
-              toast.error("请填写所有字段");
+              toast.error(t("features.pumpfun-sell.fillAllFields"));
               setLoading(false);
               return;
             }
           } else {
             if (!formData.private_key || !formData.mint || !formData.amount) {
-              toast.error("请填写所有字段");
+              toast.error(t("features.pumpfun-sell.fillAllFields"));
               setLoading(false);
               return;
             }
@@ -957,7 +963,7 @@ export default function Home() {
             requestBody.private_key = formData.private_key;
           }
 
-          const response = await fetch(`${apiUrl}/pumpfun/sell`, {
+          const response = await apiFetch("pumpfun/sell", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify(requestBody),
@@ -965,13 +971,13 @@ export default function Home() {
           const data = await response.json();
 
           if (response.ok) {
-            toast.success("Pump.fun 卖出成功！");
+            toast.success(t("features.pumpfun-sell.success"));
             setFormData((prev) => ({
               ...prev,
               status: data.status,
             }));
           } else {
-            toast.error(data.error || "卖出失败");
+            toast.error(data.error || t("features.pumpfun-sell.error"));
           }
           break;
         }
@@ -980,13 +986,13 @@ export default function Home() {
           const usingKeystore = !!formData.keystoreJson;
           if (usingKeystore) {
             if (!formData.keystoreJson || !formData.password || !formData.mint || !formData.amount) {
-              toast.error("请填写所有字段");
+              toast.error(t("features.pumpswap-sell.fillAllFields"));
               setLoading(false);
               return;
             }
           } else {
             if (!formData.private_key || !formData.mint || !formData.amount) {
-              toast.error("请填写所有字段");
+              toast.error(t("features.pumpswap-sell.fillAllFields"));
               setLoading(false);
               return;
             }
@@ -1006,7 +1012,7 @@ export default function Home() {
             requestBody.private_key = formData.private_key;
           }
 
-          const response = await fetch(`${apiUrl}/pumpswap/sell`, {
+          const response = await apiFetch("pumpswap/sell", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify(requestBody),
@@ -1014,13 +1020,13 @@ export default function Home() {
           const data = await response.json();
 
           if (response.ok) {
-            toast.success("PumpSwap 卖出成功！");
+            toast.success(t("features.pumpswap-sell.success"));
             setFormData((prev) => ({
               ...prev,
               status: data.status,
             }));
           } else {
-            toast.error(data.error || "卖出失败");
+            toast.error(data.error || t("features.pumpswap-sell.error"));
           }
           break;
         }
@@ -1030,13 +1036,13 @@ export default function Home() {
           const usingKeystore = !!formData.keystoreJson;
           if (usingKeystore) {
             if (!formData.keystoreJson || !formData.password) {
-              toast.error("请上传 keystore 文件并输入密码");
+              toast.error(t("features.pumpfun-cashback.uploadKeystore"));
               setLoading(false);
               return;
             }
           } else {
             if (!formData.private_key) {
-              toast.error("请输入私钥");
+              toast.error(t("features.pumpfun-cashback.enterPrivateKey"));
               setLoading(false);
               return;
             }
@@ -1054,7 +1060,7 @@ export default function Home() {
           }
 
           const apiUrlPath = formId === "pumpfun-cashback" ? "/pumpfun/cashback" : "/pumpswap/cashback";
-          const response = await fetch(`${apiUrl}${apiUrlPath}`, {
+          const response = await apiFetch(apiUrlPath.replace(/^\//, ""), {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify(requestBody),
@@ -1065,7 +1071,11 @@ export default function Home() {
             if (data.status === "info") {
               toast.info(data.message);
             } else {
-              toast.success("返现领取成功！");
+              toast.success(
+                formId === "pumpfun-cashback"
+                  ? t("features.pumpfun-cashback.success")
+                  : t("features.pumpswap-cashback.success"),
+              );
             }
             setFormData((prev) => ({
               ...prev,
@@ -1073,16 +1083,28 @@ export default function Home() {
               status: data.status,
             }));
           } else {
-            toast.error(data.error || "领取失败");
+            toast.error(
+              data.error ||
+                (formId === "pumpfun-cashback"
+                  ? t("features.pumpfun-cashback.error")
+                  : t("features.pumpswap-cashback.error")),
+            );
           }
           break;
         }
 
         default:
-          toast.error("未知功能");
+          toast.error(t("errors.unknownFeature"));
       }
-    } catch {
-      toast.error("请求失败，请检查后端是否运行");
+    } catch (err) {
+      const message =
+        err instanceof Error ? err.message : typeof err === "string" ? err : t("errors.unknownError");
+      toast.error(
+        t("errors.requestFailedWithHint", {
+          message,
+          port: String(DEFAULT_API_PORT),
+        }),
+      );
     } finally {
       setLoading(false);
     }
@@ -1094,13 +1116,13 @@ export default function Home() {
         return (
           <div className="space-y-4">
             <div>
-              <label className="block text-sm font-medium mb-2">名称（可选）</label>
+              <label className="block text-sm font-medium mb-2">{t("features.create-plain.name")}</label>
               <input
                 type="text"
                 value={formData.name || ""}
                 onChange={(e) => handleFormChange("name", e.target.value)}
                 className="w-full px-4 py-2 bg-white/5 border border-white/10 rounded-lg focus:outline-none focus:ring-2 focus:ring-white/20 text-white"
-                placeholder="default"
+                placeholder={t("features.create-plain.namePlaceholder")}
               />
             </div>
             <button
@@ -1108,12 +1130,12 @@ export default function Home() {
               disabled={loading}
               className="w-full py-3 bg-gradient-to-r from-purple-500 to-pink-500 rounded-lg font-semibold hover:from-purple-600 hover:to-pink-600 transition-all disabled:opacity-50"
             >
-              {loading ? "创建中..." : "创建明文私钥"}
+              {loading ? t("features.create-plain.creating") : t("features.create-plain.createButton")}
             </button>
             {formData.publicKey && (
               <div className="space-y-3 p-4 bg-white/5 rounded-lg">
                 <div>
-                  <label className="block text-sm font-medium mb-2">公钥</label>
+                  <label className="block text-sm font-medium mb-2">{t("features.create-plain.publicKey")}</label>
                   <div className="flex gap-2">
                     <code className="flex-1 px-3 py-2 bg-black/30 rounded text-xs break-all">
                       {formData.publicKey}
@@ -1127,7 +1149,7 @@ export default function Home() {
                   </div>
                 </div>
                 <div>
-                  <label className="block text-sm font-medium mb-2">私钥（请妥善保管）</label>
+                  <label className="block text-sm font-medium mb-2">{t("features.create-plain.secretKey")}</label>
                   <div className="flex gap-2">
                     <code className="flex-1 px-3 py-2 bg-black/30 rounded text-xs break-all">
                       {formData.secretKey}
@@ -1149,13 +1171,13 @@ export default function Home() {
         return (
           <div className="space-y-4">
             <div>
-              <label className="block text-sm font-medium mb-2">密码（10-20字符）</label>
+              <label className="block text-sm font-medium mb-2">{t("features.create-encrypted.password")}</label>
               <input
                 type="password"
                 value={formData.password || ""}
                 onChange={(e) => handleFormChange("password", e.target.value)}
                 className="w-full px-4 py-2 bg-white/5 border border-white/10 rounded-lg focus:outline-none focus:ring-2 focus:ring-white/20 text-white"
-                placeholder="请输入密码"
+                placeholder={t("features.create-encrypted.passwordPlaceholder")}
               />
             </div>
             <button
@@ -1163,12 +1185,12 @@ export default function Home() {
               disabled={loading}
               className="w-full py-3 bg-gradient-to-r from-purple-500 to-pink-500 rounded-lg font-semibold hover:from-purple-600 hover:to-pink-600 transition-all disabled:opacity-50"
             >
-              {loading ? "创建中..." : "创建加密私钥"}
+              {loading ? t("features.create-encrypted.creating") : t("features.create-encrypted.createButton")}
             </button>
             {formData.publicKey && (
               <div className="space-y-3 p-4 bg-white/5 rounded-lg">
                 <div>
-                  <label className="block text-sm font-medium mb-2">公钥</label>
+                  <label className="block text-sm font-medium mb-2">{t("features.create-plain.publicKey")}</label>
                   <div className="flex gap-2">
                     <code className="flex-1 px-3 py-2 bg-black/30 rounded text-xs break-all">
                       {formData.publicKey}
@@ -1182,7 +1204,7 @@ export default function Home() {
                   </div>
                 </div>
                 <div>
-                  <label className="block text-sm font-medium mb-2">加密私钥</label>
+                  <label className="block text-sm font-medium mb-2">{t("features.create-encrypted.encryptedKey")}</label>
                   <div className="flex gap-2">
                     <code className="flex-1 px-3 py-2 bg-black/30 rounded text-xs break-all">
                       {formData.encryptedKey}
@@ -1204,13 +1226,13 @@ export default function Home() {
         return (
           <div className="space-y-4">
             <div>
-              <label className="block text-sm font-medium mb-2">密码（10-20字符）</label>
+              <label className="block text-sm font-medium mb-2">{t("features.create-keystore.password")}</label>
               <input
                 type="password"
                 value={formData.password || ""}
                 onChange={(e) => handleFormChange("password", e.target.value)}
                 className="w-full px-4 py-2 bg-white/5 border border-white/10 rounded-lg focus:outline-none focus:ring-2 focus:ring-white/20 text-white"
-                placeholder="请输入密码"
+                placeholder={t("features.create-keystore.passwordPlaceholder")}
               />
             </div>
             <button
@@ -1218,12 +1240,12 @@ export default function Home() {
               disabled={loading}
               className="w-full py-3 bg-gradient-to-r from-purple-500 to-pink-500 rounded-lg font-semibold hover:from-purple-600 hover:to-pink-600 transition-all disabled:opacity-50"
             >
-              {loading ? "创建中..." : "创建 Keystore 文件"}
+              {loading ? t("features.create-keystore.creating") : t("features.create-keystore.createButton")}
             </button>
             {formData.publicKey && (
               <div className="space-y-3 p-4 bg-white/5 rounded-lg">
                 <div>
-                  <label className="block text-sm font-medium mb-2">公钥</label>
+                  <label className="block text-sm font-medium mb-2">{t("features.create-plain.publicKey")}</label>
                   <div className="flex gap-2">
                     <code className="flex-1 px-3 py-2 bg-black/30 rounded text-xs break-all">
                       {formData.publicKey}
@@ -1237,7 +1259,7 @@ export default function Home() {
                   </div>
                 </div>
                 <div>
-                  <label className="block text-sm font-medium mb-2">Keystore JSON</label>
+                  <label className="block text-sm font-medium mb-2">{t("features.create-keystore.keystoreJson")}</label>
                   <div className="flex gap-2">
                     <textarea
                       readOnly
@@ -1257,7 +1279,7 @@ export default function Home() {
                   className="w-full py-2 bg-white/10 rounded-lg hover:bg-white/20 transition-colors flex items-center justify-center gap-2"
                 >
                   <Download className="w-4 h-4" />
-                  下载 Keystore 文件
+                  {t("features.create-keystore.downloadFile")}
                 </button>
               </div>
             )}
@@ -1268,7 +1290,7 @@ export default function Home() {
         return (
           <div className="space-y-4">
             <div>
-              <label className="block text-sm font-medium mb-2">选择 Keystore 文件</label>
+              <label className="block text-sm font-medium mb-2">{t("features.import-keystore.selectFile")}</label>
               <input
                 type="file"
                 accept=".json"
@@ -1276,24 +1298,24 @@ export default function Home() {
                 className="w-full px-4 py-2 bg-white/5 border border-white/10 rounded-lg focus:outline-none focus:ring-2 focus:ring-white/20 text-white file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:bg-white/10 file:text-white hover:file:bg-white/20"
               />
             </div>
-            <div className="text-center text-gray-400">或</div>
+            <div className="text-center text-gray-400">{t("features.import-keystore.or")}</div>
             <div>
-              <label className="block text-sm font-medium mb-2">粘贴 Keystore JSON</label>
+              <label className="block text-sm font-medium mb-2">{t("features.import-keystore.pasteJson")}</label>
               <textarea
                 value={formData.keystoreJson || ""}
                 onChange={(e) => handleFormChange("keystoreJson", e.target.value)}
                 className="w-full px-4 py-2 bg-white/5 border border-white/10 rounded-lg focus:outline-none focus:ring-2 focus:ring-white/20 text-white min-h-[120px]"
-                placeholder="粘贴 Keystore JSON 内容"
+                placeholder={t("features.import-keystore.jsonPlaceholder")}
               />
             </div>
             <div>
-              <label className="block text-sm font-medium mb-2">密码</label>
+              <label className="block text-sm font-medium mb-2">{t("features.import-keystore.password")}</label>
               <input
                 type="password"
                 value={formData.password || ""}
                 onChange={(e) => handleFormChange("password", e.target.value)}
                 className="w-full px-4 py-2 bg-white/5 border border-white/10 rounded-lg focus:outline-none focus:ring-2 focus:ring-white/20 text-white"
-                placeholder="请输入密码"
+                placeholder={t("features.import-keystore.passwordPlaceholder")}
               />
             </div>
             <button
@@ -1301,18 +1323,18 @@ export default function Home() {
               disabled={loading}
               className="w-full py-3 bg-gradient-to-r from-purple-500 to-pink-500 rounded-lg font-semibold hover:from-purple-600 hover:to-pink-600 transition-all disabled:opacity-50"
             >
-              {loading ? "导入中..." : "导入 Keystore"}
+              {loading ? t("features.import-keystore.importing") : t("features.import-keystore.importButton")}
             </button>
             {formData.publicKey && (
               <div className="space-y-3 p-4 bg-white/5 rounded-lg">
                 <div>
-                  <label className="block text-sm font-medium mb-2">公钥</label>
+                  <label className="block text-sm font-medium mb-2">{t("features.create-plain.publicKey")}</label>
                   <code className="block px-3 py-2 bg-black/30 rounded text-xs break-all">
                     {formData.publicKey}
                   </code>
                 </div>
                 <div>
-                  <label className="block text-sm font-medium mb-2">私钥</label>
+                  <label className="block text-sm font-medium mb-2">{t("features.decrypt.secretKey")}</label>
                   <div className="flex gap-2">
                     <code className="flex-1 px-3 py-2 bg-black/30 rounded text-xs break-all">
                       {formData.secretKey}
@@ -1334,7 +1356,7 @@ export default function Home() {
         return (
           <div className="space-y-4">
             <div>
-              <label className="block text-sm font-medium mb-2">认证方式</label>
+              <label className="block text-sm font-medium mb-2">{t("formUi.authMethod")}</label>
               <div className="grid grid-cols-3 gap-2">
                 <button
                   onClick={() => {
@@ -1350,7 +1372,7 @@ export default function Home() {
                       : "bg-white/5 text-gray-400 hover:bg-white/10"
                   }`}
                 >
-                  📁 Keystore
+                  {t("formUi.tabKeystore")}
                 </button>
                 <button
                   onClick={() => {
@@ -1366,7 +1388,7 @@ export default function Home() {
                       : "bg-white/5 text-gray-400 hover:bg-white/10"
                   }`}
                 >
-                  🔒 加密私钥
+                  {t("formUi.tabEncrypted")}
                 </button>
                 <button
                   onClick={() => {
@@ -1383,7 +1405,7 @@ export default function Home() {
                       : "bg-white/5 text-gray-400 hover:bg-white/10"
                   }`}
                 >
-                  🔑 私钥
+                  {t("formUi.tabPrivateKey")}
                 </button>
               </div>
             </div>
@@ -1391,7 +1413,7 @@ export default function Home() {
             {authMethod["decrypt"] === "keystore" && (
               <>
                 <div>
-                  <label className="block text-sm font-medium mb-2">上传 Keystore 文件</label>
+                  <label className="block text-sm font-medium mb-2">{t("formUi.uploadKeystore")}</label>
                   <input
                     type="file"
                     accept=".json"
@@ -1399,17 +1421,17 @@ export default function Home() {
                     className="w-full px-4 py-2 bg-white/5 border border-white/10 rounded-lg focus:outline-none focus:ring-2 focus:ring-white/20 text-white file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:bg-white/10 file:text-white hover:file:bg-white/20"
                   />
                   {formData.keystoreJson && (
-                    <p className="mt-2 text-xs text-green-400">✓ 文件已上传</p>
+                    <p className="mt-2 text-xs text-green-400">{t("formUi.fileUploadedOk")}</p>
                   )}
                 </div>
                 <div>
-                  <label className="block text-sm font-medium mb-2">密码</label>
+                  <label className="block text-sm font-medium mb-2">{t("formUi.password")}</label>
                   <input
                     type="password"
                     value={formData.password || ""}
                     onChange={(e) => handleFormChange("password", e.target.value)}
                     className="w-full px-4 py-2 bg-white/5 border border-white/10 rounded-lg focus:outline-none focus:ring-2 focus:ring-white/20 text-white"
-                    placeholder="输入 keystore 密码"
+                    placeholder={t("formUi.placeholderKeystorePassword")}
                   />
                 </div>
               </>
@@ -1418,22 +1440,22 @@ export default function Home() {
             {authMethod["decrypt"] === "encrypted" && (
               <>
                 <div>
-                  <label className="block text-sm font-medium mb-2">加密私钥</label>
+                  <label className="block text-sm font-medium mb-2">{t("formUi.encryptedKey")}</label>
                   <textarea
                     value={formData.encrypted_key || ""}
                     onChange={(e) => handleFormChange("encrypted_key", e.target.value)}
                     className="w-full px-4 py-2 bg-white/5 border border-white/10 rounded-lg focus:outline-none focus:ring-2 focus:ring-white/20 text-white min-h-[120px]"
-                    placeholder="输入加密的私钥"
+                    placeholder={t("formUi.placeholderEncryptedKey")}
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium mb-2">密码</label>
+                  <label className="block text-sm font-medium mb-2">{t("formUi.password")}</label>
                   <input
                     type="password"
                     value={formData.password || ""}
                     onChange={(e) => handleFormChange("password", e.target.value)}
                     className="w-full px-4 py-2 bg-white/5 border border-white/10 rounded-lg focus:outline-none focus:ring-2 focus:ring-white/20 text-white"
-                    placeholder="输入解密密码"
+                    placeholder={t("formUi.placeholderDecryptPassword")}
                   />
                 </div>
               </>
@@ -1441,15 +1463,15 @@ export default function Home() {
 
             {authMethod["decrypt"] === "private" && (
               <div>
-                <label className="block text-sm font-medium mb-2">私钥</label>
+                <label className="block text-sm font-medium mb-2">{t("formUi.privateKey")}</label>
                 <input
                   type="password"
                   value={formData.secretKey || ""}
                   onChange={(e) => handleFormChange("secretKey", e.target.value)}
                   className="w-full px-4 py-2 bg-white/5 border border-white/10 rounded-lg focus:outline-none focus:ring-2 focus:ring-white/20 text-white"
-                  placeholder="输入私钥的 Base58 编码"
+                  placeholder={t("formUi.placeholderPrivateKeyBase58")}
                 />
-                <p className="mt-1 text-xs text-yellow-400">⚠️ 注意：私钥将以明文方式传输</p>
+                <p className="mt-1 text-xs text-yellow-400">{t("formUi.warnPlaintext")}</p>
               </div>
             )}
 
@@ -1458,12 +1480,12 @@ export default function Home() {
               disabled={loading}
               className="w-full py-3 bg-gradient-to-r from-purple-500 to-pink-500 rounded-lg font-semibold hover:from-purple-600 hover:to-pink-600 transition-all disabled:opacity-50"
             >
-              {loading ? "解密中..." : "解密私钥"}
+              {loading ? t("features.decrypt.decrypting") : t("features.decrypt.decryptButton")}
             </button>
             {formData.secretKey && (
               <div className="space-y-3 p-4 bg-white/5 rounded-lg">
                 <div>
-                  <label className="block text-sm font-medium mb-2">私钥</label>
+                  <label className="block text-sm font-medium mb-2">{t("features.decrypt.secretKey")}</label>
                   <div className="flex gap-2">
                     <code className="flex-1 px-3 py-2 bg-black/30 rounded text-xs break-all">
                       {formData.secretKey}
@@ -1485,7 +1507,7 @@ export default function Home() {
         return (
           <div className="space-y-4">
             <div>
-              <label className="block text-sm font-medium mb-2">认证方式</label>
+              <label className="block text-sm font-medium mb-2">{t("formUi.authMethod")}</label>
               <div className="grid grid-cols-3 gap-2">
                 <button
                   onClick={() => {
@@ -1501,7 +1523,7 @@ export default function Home() {
                       : "bg-white/5 text-gray-400 hover:bg-white/10"
                   }`}
                 >
-                  📁 Keystore
+                  {t("formUi.tabKeystore")}
                 </button>
                 <button
                   onClick={() => {
@@ -1517,7 +1539,7 @@ export default function Home() {
                       : "bg-white/5 text-gray-400 hover:bg-white/10"
                   }`}
                 >
-                  🔒 加密私钥
+                  {t("formUi.tabEncrypted")}
                 </button>
                 <button
                   onClick={() => {
@@ -1534,7 +1556,7 @@ export default function Home() {
                       : "bg-white/5 text-gray-400 hover:bg-white/10"
                   }`}
                 >
-                  🔑 私钥
+                  {t("formUi.tabPrivateKey")}
                 </button>
               </div>
             </div>
@@ -1542,7 +1564,7 @@ export default function Home() {
             {authMethod["unlock"] === "keystore" && (
               <>
                 <div>
-                  <label className="block text-sm font-medium mb-2">上传 Keystore 文件</label>
+                  <label className="block text-sm font-medium mb-2">{t("formUi.uploadKeystore")}</label>
                   <input
                     type="file"
                     accept=".json"
@@ -1550,17 +1572,17 @@ export default function Home() {
                     className="w-full px-4 py-2 bg-white/5 border border-white/10 rounded-lg focus:outline-none focus:ring-2 focus:ring-white/20 text-white file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:bg-white/10 file:text-white hover:file:bg-white/20"
                   />
                   {formData.keystoreJson && (
-                    <p className="mt-2 text-xs text-green-400">✓ 文件已上传</p>
+                    <p className="mt-2 text-xs text-green-400">{t("formUi.fileUploadedOk")}</p>
                   )}
                 </div>
                 <div>
-                  <label className="block text-sm font-medium mb-2">密码</label>
+                  <label className="block text-sm font-medium mb-2">{t("formUi.password")}</label>
                   <input
                     type="password"
                     value={formData.password || ""}
                     onChange={(e) => handleFormChange("password", e.target.value)}
                     className="w-full px-4 py-2 bg-white/5 border border-white/10 rounded-lg focus:outline-none focus:ring-2 focus:ring-white/20 text-white"
-                    placeholder="输入 keystore 密码"
+                    placeholder={t("formUi.placeholderKeystorePassword")}
                   />
                 </div>
               </>
@@ -1569,22 +1591,22 @@ export default function Home() {
             {authMethod["unlock"] === "encrypted" && (
               <>
                 <div>
-                  <label className="block text-sm font-medium mb-2">加密私钥</label>
+                  <label className="block text-sm font-medium mb-2">{t("formUi.encryptedKey")}</label>
                   <textarea
                     value={formData.encrypted_key || ""}
                     onChange={(e) => handleFormChange("encrypted_key", e.target.value)}
                     className="w-full px-4 py-2 bg-white/5 border border-white/10 rounded-lg focus:outline-none focus:ring-2 focus:ring-white/20 text-white min-h-[120px]"
-                    placeholder="输入加密的私钥"
+                    placeholder={t("formUi.placeholderEncryptedKey")}
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium mb-2">密码</label>
+                  <label className="block text-sm font-medium mb-2">{t("formUi.password")}</label>
                   <input
                     type="password"
                     value={formData.password || ""}
                     onChange={(e) => handleFormChange("password", e.target.value)}
                     className="w-full px-4 py-2 bg-white/5 border border-white/10 rounded-lg focus:outline-none focus:ring-2 focus:ring-white/20 text-white"
-                    placeholder="输入解密密码"
+                    placeholder={t("formUi.placeholderDecryptPassword")}
                   />
                 </div>
               </>
@@ -1592,15 +1614,15 @@ export default function Home() {
 
             {authMethod["unlock"] === "private" && (
               <div>
-                <label className="block text-sm font-medium mb-2">私钥</label>
+                <label className="block text-sm font-medium mb-2">{t("formUi.privateKey")}</label>
                 <input
                   type="password"
                   value={formData.secretKey || ""}
                   onChange={(e) => handleFormChange("secretKey", e.target.value)}
                   className="w-full px-4 py-2 bg-white/5 border border-white/10 rounded-lg focus:outline-none focus:ring-2 focus:ring-white/20 text-white"
-                  placeholder="输入私钥的 Base58 编码"
+                  placeholder={t("formUi.placeholderPrivateKeyBase58")}
                 />
-                <p className="mt-1 text-xs text-yellow-400">⚠️ 注意：私钥将以明文方式传输</p>
+                <p className="mt-1 text-xs text-yellow-400">{t("formUi.warnPlaintext")}</p>
               </div>
             )}
 
@@ -1609,18 +1631,18 @@ export default function Home() {
               disabled={loading}
               className="w-full py-3 bg-gradient-to-r from-purple-500 to-pink-500 rounded-lg font-semibold hover:from-purple-600 hover:to-pink-600 transition-all disabled:opacity-50"
             >
-              {loading ? "解锁中..." : "解锁钱包"}
+              {loading ? t("features.unlock.unlocking") : t("features.unlock.unlockButton")}
             </button>
             {formData.publicKey && (
               <div className="space-y-3 p-4 bg-white/5 rounded-lg">
                 <div>
-                  <label className="block text-sm font-medium mb-2">公钥</label>
+                  <label className="block text-sm font-medium mb-2">{t("features.create-plain.publicKey")}</label>
                   <code className="block px-3 py-2 bg-black/30 rounded text-xs break-all">
                     {formData.publicKey}
                   </code>
                 </div>
                 <div>
-                  <label className="block text-sm font-medium mb-2">私钥（已解锁）</label>
+                  <label className="block text-sm font-medium mb-2">{t("formUi.secretKeyUnlocked")}</label>
                   <div className="flex gap-2">
                     <code className="flex-1 px-3 py-2 bg-black/30 rounded text-xs break-all">
                       {formData.secretKey}
@@ -1642,24 +1664,24 @@ export default function Home() {
         return (
           <div className="space-y-4">
             <div>
-              <label className="block text-sm font-medium mb-2">钱包地址</label>
+              <label className="block text-sm font-medium mb-2">{t("features.check-balance.address")}</label>
               <input
                 type="text"
                 value={formData.address || ""}
                 onChange={(e) => handleFormChange("address", e.target.value)}
                 className="w-full px-4 py-2 bg-white/5 border border-white/10 rounded-lg focus:outline-none focus:ring-2 focus:ring-white/20 text-white"
-                placeholder="输入钱包地址"
+                placeholder={t("features.check-balance.addressPlaceholder")}
               />
             </div>
             <div>
-              <label className="block text-sm font-medium mb-2">网络</label>
+              <label className="block text-sm font-medium mb-2">{t("features.check-balance.network")}</label>
               <select
                 value={formData.network || "mainnet"}
                 onChange={(e) => handleFormChange("network", e.target.value)}
                 className="w-full px-4 py-2 bg-white/5 border border-white/10 rounded-lg focus:outline-none focus:ring-2 focus:ring-white/20 text-white"
               >
-                <option value="mainnet">主网 (Mainnet)</option>
-                <option value="devnet">测试网 (Devnet)</option>
+                <option value="mainnet">{t("features.check-balance.mainnet")}</option>
+                <option value="devnet">{t("features.check-balance.devnet")}</option>
               </select>
             </div>
             <button
@@ -1667,7 +1689,7 @@ export default function Home() {
               disabled={loading}
               className="w-full py-3 bg-gradient-to-r from-purple-500 to-pink-500 rounded-lg font-semibold hover:from-purple-600 hover:to-pink-600 transition-all disabled:opacity-50"
             >
-              {loading ? "查询中..." : "查询余额"}
+              {loading ? t("features.check-balance.checking") : t("features.check-balance.checkButton")}
             </button>
             {formData.balance && (
               <div className="p-4 bg-white/5 rounded-lg">
@@ -1684,7 +1706,7 @@ export default function Home() {
         return (
           <div className="space-y-4">
             <div>
-              <label className="block text-sm font-medium mb-2">认证方式</label>
+              <label className="block text-sm font-medium mb-2">{t("formUi.authMethod")}</label>
               <div className="grid grid-cols-3 gap-2">
                 <button
                   onClick={() => {
@@ -1700,7 +1722,7 @@ export default function Home() {
                       : "bg-white/5 text-gray-400 hover:bg-white/10"
                   }`}
                 >
-                  📁 Keystore
+                  {t("formUi.tabKeystore")}
                 </button>
                 <button
                   onClick={() => {
@@ -1716,7 +1738,7 @@ export default function Home() {
                       : "bg-white/5 text-gray-400 hover:bg-white/10"
                   }`}
                 >
-                  🔒 加密私钥
+                  {t("formUi.tabEncrypted")}
                 </button>
                 <button
                   onClick={() => {
@@ -1733,7 +1755,7 @@ export default function Home() {
                       : "bg-white/5 text-gray-400 hover:bg-white/10"
                   }`}
                 >
-                  🔑 私钥
+                  {t("formUi.tabPrivateKey")}
                 </button>
               </div>
             </div>
@@ -1741,7 +1763,7 @@ export default function Home() {
             {authMethod["get-pubkey"] === "keystore" && (
               <>
                 <div>
-                  <label className="block text-sm font-medium mb-2">上传 Keystore 文件</label>
+                  <label className="block text-sm font-medium mb-2">{t("formUi.uploadKeystore")}</label>
                   <input
                     type="file"
                     accept=".json"
@@ -1749,17 +1771,17 @@ export default function Home() {
                     className="w-full px-4 py-2 bg-white/5 border border-white/10 rounded-lg focus:outline-none focus:ring-2 focus:ring-white/20 text-white file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:bg-white/10 file:text-white hover:file:bg-white/20"
                   />
                   {formData.keystoreJson && (
-                    <p className="mt-2 text-xs text-green-400">✓ 文件已上传</p>
+                    <p className="mt-2 text-xs text-green-400">{t("formUi.fileUploadedOk")}</p>
                   )}
                 </div>
                 <div>
-                  <label className="block text-sm font-medium mb-2">密码</label>
+                  <label className="block text-sm font-medium mb-2">{t("formUi.password")}</label>
                   <input
                     type="password"
                     value={formData.password || ""}
                     onChange={(e) => handleFormChange("password", e.target.value)}
                     className="w-full px-4 py-2 bg-white/5 border border-white/10 rounded-lg focus:outline-none focus:ring-2 focus:ring-white/20 text-white"
-                    placeholder="输入 keystore 密码"
+                    placeholder={t("formUi.placeholderKeystorePassword")}
                   />
                 </div>
               </>
@@ -1768,22 +1790,22 @@ export default function Home() {
             {authMethod["get-pubkey"] === "encrypted" && (
               <>
                 <div>
-                  <label className="block text-sm font-medium mb-2">加密私钥</label>
+                  <label className="block text-sm font-medium mb-2">{t("formUi.encryptedKey")}</label>
                   <textarea
                     value={formData.encryptedKey || ""}
                     onChange={(e) => handleFormChange("encryptedKey", e.target.value)}
                     className="w-full px-4 py-2 bg-white/5 border border-white/10 rounded-lg focus:outline-none focus:ring-2 focus:ring-white/20 text-white min-h-[100px]"
-                    placeholder="输入加密的私钥"
+                    placeholder={t("formUi.placeholderEncryptedKey")}
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium mb-2">密码</label>
+                  <label className="block text-sm font-medium mb-2">{t("formUi.password")}</label>
                   <input
                     type="password"
                     value={formData.password || ""}
                     onChange={(e) => handleFormChange("password", e.target.value)}
                     className="w-full px-4 py-2 bg-white/5 border border-white/10 rounded-lg focus:outline-none focus:ring-2 focus:ring-white/20 text-white"
-                    placeholder="输入解密密码"
+                    placeholder={t("formUi.placeholderDecryptPassword")}
                   />
                 </div>
               </>
@@ -1791,15 +1813,15 @@ export default function Home() {
 
             {authMethod["get-pubkey"] === "private" && (
               <div>
-                <label className="block text-sm font-medium mb-2">私钥</label>
+                <label className="block text-sm font-medium mb-2">{t("formUi.privateKey")}</label>
                 <input
                   type="password"
                   value={formData.secretKey || ""}
                   onChange={(e) => handleFormChange("secretKey", e.target.value)}
                   className="w-full px-4 py-2 bg-white/5 border border-white/10 rounded-lg focus:outline-none focus:ring-2 focus:ring-white/20 text-white"
-                  placeholder="输入私钥的 Base58 编码"
+                  placeholder={t("formUi.placeholderPrivateKeyBase58")}
                 />
-                <p className="mt-1 text-xs text-yellow-400">⚠️ 注意：私钥将以明文方式传输，建议使用加密方式</p>
+                <p className="mt-1 text-xs text-yellow-400">{t("formUi.warnPlaintextSuggestEnc")}</p>
               </div>
             )}
 
@@ -1808,12 +1830,12 @@ export default function Home() {
               disabled={loading}
               className="w-full py-3 bg-gradient-to-r from-purple-500 to-pink-500 rounded-lg font-semibold hover:from-purple-600 hover:to-pink-600 transition-all disabled:opacity-50"
             >
-              {loading ? "获取中..." : "获取公钥"}
+              {loading ? t("features.get-pubkey.getting") : t("features.get-pubkey.getButton")}
             </button>
             {formData.publicKey && (
               <div className="space-y-3 p-4 bg-white/5 rounded-lg">
                 <div>
-                  <label className="block text-sm font-medium mb-2">公钥</label>
+                  <label className="block text-sm font-medium mb-2">{t("features.create-plain.publicKey")}</label>
                   <div className="flex gap-2">
                     <code className="flex-1 px-3 py-2 bg-black/30 rounded text-xs break-all">
                       {formData.publicKey}
@@ -1836,7 +1858,7 @@ export default function Home() {
           <div className="space-y-4">
             {/* Authentication Method Selector */}
             <div>
-              <label className="block text-sm font-medium mb-2">认证方式</label>
+              <label className="block text-sm font-medium mb-2">{t("formUi.authMethod")}</label>
               <div className="grid grid-cols-3 gap-2">
                 <button
                   onClick={() => {
@@ -1852,7 +1874,7 @@ export default function Home() {
                       : "bg-white/5 text-gray-400 hover:bg-white/10"
                   }`}
                 >
-                  📁 Keystore
+                  {t("formUi.tabKeystore")}
                 </button>
                 <button
                   onClick={() => {
@@ -1868,7 +1890,7 @@ export default function Home() {
                       : "bg-white/5 text-gray-400 hover:bg-white/10"
                   }`}
                 >
-                  🔒 加密私钥
+                  {t("formUi.tabEncrypted")}
                 </button>
                 <button
                   onClick={() => {
@@ -1885,7 +1907,7 @@ export default function Home() {
                       : "bg-white/5 text-gray-400 hover:bg-white/10"
                   }`}
                 >
-                  🔑 私钥
+                  {t("formUi.tabPrivateKey")}
                 </button>
               </div>
             </div>
@@ -1894,7 +1916,7 @@ export default function Home() {
             {authMethod["transfer-sol"] === "keystore" && (
               <>
                 <div>
-                  <label className="block text-sm font-medium mb-2">上传 Keystore 文件</label>
+                  <label className="block text-sm font-medium mb-2">{t("formUi.uploadKeystore")}</label>
                   <input
                     type="file"
                     accept=".json"
@@ -1902,17 +1924,17 @@ export default function Home() {
                     className="w-full px-4 py-2 bg-white/5 border border-white/10 rounded-lg focus:outline-none focus:ring-2 focus:ring-white/20 text-white file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:bg-white/10 file:text-white hover:file:bg-white/20"
                   />
                   {formData.keystoreJson && (
-                    <p className="mt-2 text-xs text-green-400">✓ 文件已上传</p>
+                    <p className="mt-2 text-xs text-green-400">{t("formUi.fileUploadedOk")}</p>
                   )}
                 </div>
                 <div>
-                  <label className="block text-sm font-medium mb-2">密码</label>
+                  <label className="block text-sm font-medium mb-2">{t("formUi.password")}</label>
                   <input
                     type="password"
                     value={formData.password || ""}
                     onChange={(e) => handleFormChange("password", e.target.value)}
                     className="w-full px-4 py-2 bg-white/5 border border-white/10 rounded-lg focus:outline-none focus:ring-2 focus:ring-white/20 text-white"
-                    placeholder="输入 keystore 密码"
+                    placeholder={t("formUi.placeholderKeystorePassword")}
                   />
                 </div>
               </>
@@ -1921,22 +1943,22 @@ export default function Home() {
             {authMethod["transfer-sol"] === "encrypted" && (
               <>
                 <div>
-                  <label className="block text-sm font-medium mb-2">加密私钥</label>
+                  <label className="block text-sm font-medium mb-2">{t("formUi.encryptedKey")}</label>
                   <textarea
                     value={formData.encrypted_key || ""}
                     onChange={(e) => handleFormChange("encrypted_key", e.target.value)}
                     className="w-full px-4 py-2 bg-white/5 border border-white/10 rounded-lg focus:outline-none focus:ring-2 focus:ring-white/20 text-white min-h-[120px]"
-                    placeholder="输入加密的私钥"
+                    placeholder={t("formUi.placeholderEncryptedKey")}
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium mb-2">密码</label>
+                  <label className="block text-sm font-medium mb-2">{t("formUi.password")}</label>
                   <input
                     type="password"
                     value={formData.password || ""}
                     onChange={(e) => handleFormChange("password", e.target.value)}
                     className="w-full px-4 py-2 bg-white/5 border border-white/10 rounded-lg focus:outline-none focus:ring-2 focus:ring-white/20 text-white"
-                    placeholder="输入解密密码"
+                    placeholder={t("formUi.placeholderDecryptPassword")}
                   />
                 </div>
               </>
@@ -1944,48 +1966,48 @@ export default function Home() {
 
             {authMethod["transfer-sol"] === "private" && (
               <div>
-                <label className="block text-sm font-medium mb-2">发送方私钥</label>
+                <label className="block text-sm font-medium mb-2">{t("formUi.senderPrivateKey")}</label>
                 <input
                   type="password"
                   value={formData.private_key || ""}
                   onChange={(e) => handleFormChange("private_key", e.target.value)}
                   className="w-full px-4 py-2 bg-white/5 border border-white/10 rounded-lg focus:outline-none focus:ring-2 focus:ring-white/20 text-white"
-                  placeholder="输入私钥的 Base58 编码"
+                  placeholder={t("formUi.placeholderPrivateKeyBase58")}
                 />
-                <p className="mt-1 text-xs text-yellow-400">⚠️ 警告：私钥将以明文方式传输</p>
+                <p className="mt-1 text-xs text-yellow-400">{t("formUi.warnPlaintextStrong")}</p>
               </div>
             )}
 
             <div>
-              <label className="block text-sm font-medium mb-2">接收方地址</label>
+              <label className="block text-sm font-medium mb-2">{t("features.transfer-sol.toAddress")}</label>
               <input
                 type="text"
                 value={formData.to_address || ""}
                 onChange={(e) => handleFormChange("to_address", e.target.value)}
                 className="w-full px-4 py-2 bg-white/5 border border-white/10 rounded-lg focus:outline-none focus:ring-2 focus:ring-white/20 text-white"
-                placeholder="输入接收方地址"
+                placeholder={t("features.transfer-sol.addressPlaceholder")}
               />
             </div>
             <div>
-              <label className="block text-sm font-medium mb-2">金额 (SOL)</label>
+              <label className="block text-sm font-medium mb-2">{t("features.transfer-sol.amount")}</label>
               <input
                 type="number"
                 step="0.000000001"
                 value={formData.amount || ""}
                 onChange={(e) => handleFormChange("amount", e.target.value)}
                 className="w-full px-4 py-2 bg-white/5 border border-white/10 rounded-lg focus:outline-none focus:ring-2 focus:ring-white/20 text-white"
-                placeholder="输入转账金额"
+                placeholder={t("features.transfer-sol.amountPlaceholder")}
               />
             </div>
             <div>
-              <label className="block text-sm font-medium mb-2">网络</label>
+              <label className="block text-sm font-medium mb-2">{t("features.check-balance.network")}</label>
               <select
                 value={formData.network || "mainnet"}
                 onChange={(e) => handleFormChange("network", e.target.value)}
                 className="w-full px-4 py-2 bg-white/5 border border-white/10 rounded-lg focus:outline-none focus:ring-2 focus:ring-white/20 text-white"
               >
-                <option value="mainnet">主网 (Mainnet)</option>
-                <option value="devnet">测试网 (Devnet)</option>
+                <option value="mainnet">{t("features.check-balance.mainnet")}</option>
+                <option value="devnet">{t("features.check-balance.devnet")}</option>
               </select>
             </div>
             <button
@@ -1993,12 +2015,12 @@ export default function Home() {
               disabled={loading}
               className="w-full py-3 bg-gradient-to-r from-purple-500 to-pink-500 rounded-lg font-semibold hover:from-purple-600 hover:to-pink-600 transition-all disabled:opacity-50"
             >
-              {loading ? "发送中..." : "发送 SOL"}
+              {loading ? t("features.transfer-sol.transferring") : t("features.transfer-sol.transferButton")}
             </button>
             {formData.signature && (
               <div className="space-y-3 p-4 bg-white/5 rounded-lg">
                 <div>
-                  <label className="block text-sm font-medium mb-2">交易签名</label>
+                  <label className="block text-sm font-medium mb-2">{t("formUi.txSignature")}</label>
                   <div className="flex gap-2">
                     <code className="flex-1 px-3 py-2 bg-black/30 rounded text-xs break-all">
                       {formData.signature}
@@ -2020,7 +2042,7 @@ export default function Home() {
         return (
           <div className="space-y-4">
             <div>
-              <label className="block text-sm font-medium mb-2">认证方式</label>
+              <label className="block text-sm font-medium mb-2">{t("formUi.authMethod")}</label>
               <div className="grid grid-cols-3 gap-2">
                 <button
                   onClick={() => {
@@ -2036,7 +2058,7 @@ export default function Home() {
                       : "bg-white/5 text-gray-400 hover:bg-white/10"
                   }`}
                 >
-                  📁 Keystore
+                  {t("formUi.tabKeystore")}
                 </button>
                 <button
                   onClick={() => {
@@ -2052,7 +2074,7 @@ export default function Home() {
                       : "bg-white/5 text-gray-400 hover:bg-white/10"
                   }`}
                 >
-                  🔒 加密私钥
+                  {t("formUi.tabEncrypted")}
                 </button>
                 <button
                   onClick={() => {
@@ -2069,7 +2091,7 @@ export default function Home() {
                       : "bg-white/5 text-gray-400 hover:bg-white/10"
                   }`}
                 >
-                  🔑 私钥
+                  {t("formUi.tabPrivateKey")}
                 </button>
               </div>
             </div>
@@ -2077,7 +2099,7 @@ export default function Home() {
             {authMethod["transfer-token"] === "keystore" && (
               <>
                 <div>
-                  <label className="block text-sm font-medium mb-2">上传 Keystore 文件</label>
+                  <label className="block text-sm font-medium mb-2">{t("formUi.uploadKeystore")}</label>
                   <input
                     type="file"
                     accept=".json"
@@ -2085,17 +2107,17 @@ export default function Home() {
                     className="w-full px-4 py-2 bg-white/5 border border-white/10 rounded-lg focus:outline-none focus:ring-2 focus:ring-white/20 text-white file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:bg-white/10 file:text-white hover:file:bg-white/20"
                   />
                   {formData.keystoreJson && (
-                    <p className="mt-2 text-xs text-green-400">✓ 文件已上传</p>
+                    <p className="mt-2 text-xs text-green-400">{t("formUi.fileUploadedOk")}</p>
                   )}
                 </div>
                 <div>
-                  <label className="block text-sm font-medium mb-2">密码</label>
+                  <label className="block text-sm font-medium mb-2">{t("formUi.password")}</label>
                   <input
                     type="password"
                     value={formData.password || ""}
                     onChange={(e) => handleFormChange("password", e.target.value)}
                     className="w-full px-4 py-2 bg-white/5 border border-white/10 rounded-lg focus:outline-none focus:ring-2 focus:ring-white/20 text-white"
-                    placeholder="输入 keystore 密码"
+                    placeholder={t("formUi.placeholderKeystorePassword")}
                   />
                 </div>
               </>
@@ -2104,22 +2126,22 @@ export default function Home() {
             {authMethod["transfer-token"] === "encrypted" && (
               <>
                 <div>
-                  <label className="block text-sm font-medium mb-2">加密私钥</label>
+                  <label className="block text-sm font-medium mb-2">{t("formUi.encryptedKey")}</label>
                   <textarea
                     value={formData.encrypted_key || ""}
                     onChange={(e) => handleFormChange("encrypted_key", e.target.value)}
                     className="w-full px-4 py-2 bg-white/5 border border-white/10 rounded-lg focus:outline-none focus:ring-2 focus:ring-white/20 text-white min-h-[120px]"
-                    placeholder="输入加密的私钥"
+                    placeholder={t("formUi.placeholderEncryptedKey")}
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium mb-2">密码</label>
+                  <label className="block text-sm font-medium mb-2">{t("formUi.password")}</label>
                   <input
                     type="password"
                     value={formData.password || ""}
                     onChange={(e) => handleFormChange("password", e.target.value)}
                     className="w-full px-4 py-2 bg-white/5 border border-white/10 rounded-lg focus:outline-none focus:ring-2 focus:ring-white/20 text-white"
-                    placeholder="输入解密密码"
+                    placeholder={t("formUi.placeholderDecryptPassword")}
                   />
                 </div>
               </>
@@ -2127,68 +2149,68 @@ export default function Home() {
 
             {authMethod["transfer-token"] === "private" && (
               <div>
-                <label className="block text-sm font-medium mb-2">发送方私钥</label>
+                <label className="block text-sm font-medium mb-2">{t("formUi.senderPrivateKey")}</label>
                 <input
                   type="password"
                   value={formData.private_key || ""}
                   onChange={(e) => handleFormChange("private_key", e.target.value)}
                   className="w-full px-4 py-2 bg-white/5 border border-white/10 rounded-lg focus:outline-none focus:ring-2 focus:ring-white/20 text-white"
-                  placeholder="输入私钥的 Base58 编码"
+                  placeholder={t("formUi.placeholderPrivateKeyBase58")}
                 />
-                <p className="mt-1 text-xs text-yellow-400">⚠️ 警告：私钥将以明文方式传输</p>
+                <p className="mt-1 text-xs text-yellow-400">{t("formUi.warnPlaintextStrong")}</p>
               </div>
             )}
 
             <div>
-              <label className="block text-sm font-medium mb-2">接收方地址</label>
+              <label className="block text-sm font-medium mb-2">{t("features.transfer-token.toAddress")}</label>
               <input
                 type="text"
                 value={formData.to_address || ""}
                 onChange={(e) => handleFormChange("to_address", e.target.value)}
                 className="w-full px-4 py-2 bg-white/5 border border-white/10 rounded-lg focus:outline-none focus:ring-2 focus:ring-white/20 text-white"
-                placeholder="输入接收方地址"
+                placeholder={t("features.transfer-token.addressPlaceholder")}
               />
             </div>
             <div>
-              <label className="block text-sm font-medium mb-2">Token Mint 地址</label>
+              <label className="block text-sm font-medium mb-2">{t("features.transfer-token.mintAddress")}</label>
               <input
                 type="text"
                 value={formData.mint || ""}
                 onChange={(e) => handleFormChange("mint", e.target.value)}
                 className="w-full px-4 py-2 bg-white/5 border border-white/10 rounded-lg focus:outline-none focus:ring-2 focus:ring-white/20 text-white"
-                placeholder="输入 Token Mint 地址"
+                placeholder={t("features.transfer-token.mintPlaceholder")}
               />
             </div>
             <div>
-              <label className="block text-sm font-medium mb-2">金额</label>
+              <label className="block text-sm font-medium mb-2">{t("features.transfer-token.amount")}</label>
               <input
                 type="number"
                 step="0.000000001"
                 value={formData.amount || ""}
                 onChange={(e) => handleFormChange("amount", e.target.value)}
                 className="w-full px-4 py-2 bg-white/5 border border-white/10 rounded-lg focus:outline-none focus:ring-2 focus:ring-white/20 text-white"
-                placeholder="输入转账金额"
+                placeholder={t("features.transfer-token.amountPlaceholder")}
               />
             </div>
             <div>
-              <label className="block text-sm font-medium mb-2">小数位数</label>
+              <label className="block text-sm font-medium mb-2">{t("features.transfer-token.decimals")}</label>
               <input
                 type="number"
                 value={formData.decimals || "9"}
                 onChange={(e) => handleFormChange("decimals", e.target.value)}
                 className="w-full px-4 py-2 bg-white/5 border border-white/10 rounded-lg focus:outline-none focus:ring-2 focus:ring-white/20 text-white"
-                placeholder="输入小数位数（默认9）"
+                placeholder={t("features.transfer-token.decimalsPlaceholder")}
               />
             </div>
             <div>
-              <label className="block text-sm font-medium mb-2">网络</label>
+              <label className="block text-sm font-medium mb-2">{t("features.check-balance.network")}</label>
               <select
                 value={formData.network || "mainnet"}
                 onChange={(e) => handleFormChange("network", e.target.value)}
                 className="w-full px-4 py-2 bg-white/5 border border-white/10 rounded-lg focus:outline-none focus:ring-2 focus:ring-white/20 text-white"
               >
-                <option value="mainnet">主网 (Mainnet)</option>
-                <option value="devnet">测试网 (Devnet)</option>
+                <option value="mainnet">{t("features.check-balance.mainnet")}</option>
+                <option value="devnet">{t("features.check-balance.devnet")}</option>
               </select>
             </div>
             <button
@@ -2196,12 +2218,12 @@ export default function Home() {
               disabled={loading}
               className="w-full py-3 bg-gradient-to-r from-purple-500 to-pink-500 rounded-lg font-semibold hover:from-purple-600 hover:to-pink-600 transition-all disabled:opacity-50"
             >
-              {loading ? "发送中..." : "发送 Token"}
+              {loading ? t("features.transfer-token.transferring") : t("features.transfer-token.transferButton")}
             </button>
             {formData.signature && (
               <div className="space-y-3 p-4 bg-white/5 rounded-lg">
                 <div>
-                  <label className="block text-sm font-medium mb-2">交易签名</label>
+                  <label className="block text-sm font-medium mb-2">{t("formUi.txSignature")}</label>
                   <div className="flex gap-2">
                     <code className="flex-1 px-3 py-2 bg-black/30 rounded text-xs break-all">
                       {formData.signature}
@@ -2223,7 +2245,7 @@ export default function Home() {
         return (
           <div className="space-y-4">
             <div>
-              <label className="block text-sm font-medium mb-2">认证方式</label>
+              <label className="block text-sm font-medium mb-2">{t("formUi.authMethod")}</label>
               <div className="grid grid-cols-3 gap-2">
                 <button
                   onClick={() => {
@@ -2239,7 +2261,7 @@ export default function Home() {
                       : "bg-white/5 text-gray-400 hover:bg-white/10"
                   }`}
                 >
-                  📁 Keystore
+                  {t("formUi.tabKeystore")}
                 </button>
                 <button
                   onClick={() => {
@@ -2255,7 +2277,7 @@ export default function Home() {
                       : "bg-white/5 text-gray-400 hover:bg-white/10"
                   }`}
                 >
-                  🔒 加密私钥
+                  {t("formUi.tabEncrypted")}
                 </button>
                 <button
                   onClick={() => {
@@ -2272,7 +2294,7 @@ export default function Home() {
                       : "bg-white/5 text-gray-400 hover:bg-white/10"
                   }`}
                 >
-                  🔑 私钥
+                  {t("formUi.tabPrivateKey")}
                 </button>
               </div>
             </div>
@@ -2280,7 +2302,7 @@ export default function Home() {
             {authMethod["create-wsol-ata"] === "keystore" && (
               <>
                 <div>
-                  <label className="block text-sm font-medium mb-2">上传 Keystore 文件</label>
+                  <label className="block text-sm font-medium mb-2">{t("formUi.uploadKeystore")}</label>
                   <input
                     type="file"
                     accept=".json"
@@ -2288,17 +2310,17 @@ export default function Home() {
                     className="w-full px-4 py-2 bg-white/5 border border-white/10 rounded-lg focus:outline-none focus:ring-2 focus:ring-white/20 text-white file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:bg-white/10 file:text-white hover:file:bg-white/20"
                   />
                   {formData.keystoreJson && (
-                    <p className="mt-2 text-xs text-green-400">✓ 文件已上传</p>
+                    <p className="mt-2 text-xs text-green-400">{t("formUi.fileUploadedOk")}</p>
                   )}
                 </div>
                 <div>
-                  <label className="block text-sm font-medium mb-2">密码</label>
+                  <label className="block text-sm font-medium mb-2">{t("formUi.password")}</label>
                   <input
                     type="password"
                     value={formData.password || ""}
                     onChange={(e) => handleFormChange("password", e.target.value)}
                     className="w-full px-4 py-2 bg-white/5 border border-white/10 rounded-lg focus:outline-none focus:ring-2 focus:ring-white/20 text-white"
-                    placeholder="输入 keystore 密码"
+                    placeholder={t("formUi.placeholderKeystorePassword")}
                   />
                 </div>
               </>
@@ -2307,22 +2329,22 @@ export default function Home() {
             {authMethod["create-wsol-ata"] === "encrypted" && (
               <>
                 <div>
-                  <label className="block text-sm font-medium mb-2">加密私钥</label>
+                  <label className="block text-sm font-medium mb-2">{t("formUi.encryptedKey")}</label>
                   <textarea
                     value={formData.encrypted_key || ""}
                     onChange={(e) => handleFormChange("encrypted_key", e.target.value)}
                     className="w-full px-4 py-2 bg-white/5 border border-white/10 rounded-lg focus:outline-none focus:ring-2 focus:ring-white/20 text-white min-h-[120px]"
-                    placeholder="输入加密的私钥"
+                    placeholder={t("formUi.placeholderEncryptedKey")}
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium mb-2">密码</label>
+                  <label className="block text-sm font-medium mb-2">{t("formUi.password")}</label>
                   <input
                     type="password"
                     value={formData.password || ""}
                     onChange={(e) => handleFormChange("password", e.target.value)}
                     className="w-full px-4 py-2 bg-white/5 border border-white/10 rounded-lg focus:outline-none focus:ring-2 focus:ring-white/20 text-white"
-                    placeholder="输入解密密码"
+                    placeholder={t("formUi.placeholderDecryptPassword")}
                   />
                 </div>
               </>
@@ -2330,27 +2352,27 @@ export default function Home() {
 
             {authMethod["create-wsol-ata"] === "private" && (
               <div>
-                <label className="block text-sm font-medium mb-2">私钥</label>
+                <label className="block text-sm font-medium mb-2">{t("formUi.privateKey")}</label>
                 <input
                   type="password"
                   value={formData.private_key || ""}
                   onChange={(e) => handleFormChange("private_key", e.target.value)}
                   className="w-full px-4 py-2 bg-white/5 border border-white/10 rounded-lg focus:outline-none focus:ring-2 focus:ring-white/20 text-white"
-                  placeholder="输入私钥的 Base58 编码"
+                  placeholder={t("formUi.placeholderPrivateKeyBase58")}
                 />
-                <p className="mt-1 text-xs text-yellow-400">⚠️ 警告：私钥将以明文方式传输</p>
+                <p className="mt-1 text-xs text-yellow-400">{t("formUi.warnPlaintextStrong")}</p>
               </div>
             )}
 
             <div>
-              <label className="block text-sm font-medium mb-2">网络</label>
+              <label className="block text-sm font-medium mb-2">{t("features.check-balance.network")}</label>
               <select
                 value={formData.network || "mainnet"}
                 onChange={(e) => handleFormChange("network", e.target.value)}
                 className="w-full px-4 py-2 bg-white/5 border border-white/10 rounded-lg focus:outline-none focus:ring-2 focus:ring-white/20 text-white"
               >
-                <option value="mainnet">主网 (Mainnet)</option>
-                <option value="devnet">测试网 (Devnet)</option>
+                <option value="mainnet">{t("features.check-balance.mainnet")}</option>
+                <option value="devnet">{t("features.check-balance.devnet")}</option>
               </select>
             </div>
             <button
@@ -2358,12 +2380,12 @@ export default function Home() {
               disabled={loading}
               className="w-full py-3 bg-gradient-to-r from-purple-500 to-pink-500 rounded-lg font-semibold hover:from-purple-600 hover:to-pink-600 transition-all disabled:opacity-50"
             >
-              {loading ? "创建中..." : "创建 WSOL ATA"}
+              {loading ? t("features.create-wsol-ata.creating") : t("features.create-wsol-ata.createButton")}
             </button>
             {formData.signature && (
               <div className="space-y-3 p-4 bg-white/5 rounded-lg">
                 <div>
-                  <label className="block text-sm font-medium mb-2">交易签名</label>
+                  <label className="block text-sm font-medium mb-2">{t("formUi.txSignature")}</label>
                   <div className="flex gap-2">
                     <code className="flex-1 px-3 py-2 bg-black/30 rounded text-xs break-all">
                       {formData.signature}
@@ -2385,7 +2407,7 @@ export default function Home() {
         return (
           <div className="space-y-4">
             <div>
-              <label className="block text-sm font-medium mb-2">认证方式</label>
+              <label className="block text-sm font-medium mb-2">{t("formUi.authMethod")}</label>
               <div className="grid grid-cols-3 gap-2">
                 <button
                   onClick={() => {
@@ -2401,7 +2423,7 @@ export default function Home() {
                       : "bg-white/5 text-gray-400 hover:bg-white/10"
                   }`}
                 >
-                  📁 Keystore
+                  {t("formUi.tabKeystore")}
                 </button>
                 <button
                   onClick={() => {
@@ -2417,7 +2439,7 @@ export default function Home() {
                       : "bg-white/5 text-gray-400 hover:bg-white/10"
                   }`}
                 >
-                  🔒 加密私钥
+                  {t("formUi.tabEncrypted")}
                 </button>
                 <button
                   onClick={() => {
@@ -2434,7 +2456,7 @@ export default function Home() {
                       : "bg-white/5 text-gray-400 hover:bg-white/10"
                   }`}
                 >
-                  🔑 私钥
+                  {t("formUi.tabPrivateKey")}
                 </button>
               </div>
             </div>
@@ -2442,7 +2464,7 @@ export default function Home() {
             {authMethod["wrap-sol"] === "keystore" && (
               <>
                 <div>
-                  <label className="block text-sm font-medium mb-2">上传 Keystore 文件</label>
+                  <label className="block text-sm font-medium mb-2">{t("formUi.uploadKeystore")}</label>
                   <input
                     type="file"
                     accept=".json"
@@ -2450,17 +2472,17 @@ export default function Home() {
                     className="w-full px-4 py-2 bg-white/5 border border-white/10 rounded-lg focus:outline-none focus:ring-2 focus:ring-white/20 text-white file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:bg-white/10 file:text-white hover:file:bg-white/20"
                   />
                   {formData.keystoreJson && (
-                    <p className="mt-2 text-xs text-green-400">✓ 文件已上传</p>
+                    <p className="mt-2 text-xs text-green-400">{t("formUi.fileUploadedOk")}</p>
                   )}
                 </div>
                 <div>
-                  <label className="block text-sm font-medium mb-2">密码</label>
+                  <label className="block text-sm font-medium mb-2">{t("formUi.password")}</label>
                   <input
                     type="password"
                     value={formData.password || ""}
                     onChange={(e) => handleFormChange("password", e.target.value)}
                     className="w-full px-4 py-2 bg-white/5 border border-white/10 rounded-lg focus:outline-none focus:ring-2 focus:ring-white/20 text-white"
-                    placeholder="输入 keystore 密码"
+                    placeholder={t("formUi.placeholderKeystorePassword")}
                   />
                 </div>
               </>
@@ -2469,22 +2491,22 @@ export default function Home() {
             {authMethod["wrap-sol"] === "encrypted" && (
               <>
                 <div>
-                  <label className="block text-sm font-medium mb-2">加密私钥</label>
+                  <label className="block text-sm font-medium mb-2">{t("formUi.encryptedKey")}</label>
                   <textarea
                     value={formData.encrypted_key || ""}
                     onChange={(e) => handleFormChange("encrypted_key", e.target.value)}
                     className="w-full px-4 py-2 bg-white/5 border border-white/10 rounded-lg focus:outline-none focus:ring-2 focus:ring-white/20 text-white min-h-[120px]"
-                    placeholder="输入加密的私钥"
+                    placeholder={t("formUi.placeholderEncryptedKey")}
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium mb-2">密码</label>
+                  <label className="block text-sm font-medium mb-2">{t("formUi.password")}</label>
                   <input
                     type="password"
                     value={formData.password || ""}
                     onChange={(e) => handleFormChange("password", e.target.value)}
                     className="w-full px-4 py-2 bg-white/5 border border-white/10 rounded-lg focus:outline-none focus:ring-2 focus:ring-white/20 text-white"
-                    placeholder="输入解密密码"
+                    placeholder={t("formUi.placeholderDecryptPassword")}
                   />
                 </div>
               </>
@@ -2492,38 +2514,38 @@ export default function Home() {
 
             {authMethod["wrap-sol"] === "private" && (
               <div>
-                <label className="block text-sm font-medium mb-2">私钥</label>
+                <label className="block text-sm font-medium mb-2">{t("formUi.privateKey")}</label>
                 <input
                   type="password"
                   value={formData.private_key || ""}
                   onChange={(e) => handleFormChange("private_key", e.target.value)}
                   className="w-full px-4 py-2 bg-white/5 border border-white/10 rounded-lg focus:outline-none focus:ring-2 focus:ring-white/20 text-white"
-                  placeholder="输入私钥的 Base58 编码"
+                  placeholder={t("formUi.placeholderPrivateKeyBase58")}
                 />
-                <p className="mt-1 text-xs text-yellow-400">⚠️ 警告：私钥将以明文方式传输</p>
+                <p className="mt-1 text-xs text-yellow-400">{t("formUi.warnPlaintextStrong")}</p>
               </div>
             )}
 
             <div>
-              <label className="block text-sm font-medium mb-2">封装金额 (SOL)</label>
+              <label className="block text-sm font-medium mb-2">{t("features.wrap-sol.amount")}</label>
               <input
                 type="number"
                 step="0.000000001"
                 value={formData.amount || ""}
                 onChange={(e) => handleFormChange("amount", e.target.value)}
                 className="w-full px-4 py-2 bg-white/5 border border-white/10 rounded-lg focus:outline-none focus:ring-2 focus:ring-white/20 text-white"
-                placeholder="输入封装金额"
+                placeholder={t("features.wrap-sol.amountPlaceholder")}
               />
             </div>
             <div>
-              <label className="block text-sm font-medium mb-2">网络</label>
+              <label className="block text-sm font-medium mb-2">{t("features.check-balance.network")}</label>
               <select
                 value={formData.network || "mainnet"}
                 onChange={(e) => handleFormChange("network", e.target.value)}
                 className="w-full px-4 py-2 bg-white/5 border border-white/10 rounded-lg focus:outline-none focus:ring-2 focus:ring-white/20 text-white"
               >
-                <option value="mainnet">主网 (Mainnet)</option>
-                <option value="devnet">测试网 (Devnet)</option>
+                <option value="mainnet">{t("features.check-balance.mainnet")}</option>
+                <option value="devnet">{t("features.check-balance.devnet")}</option>
               </select>
             </div>
             <button
@@ -2531,12 +2553,12 @@ export default function Home() {
               disabled={loading}
               className="w-full py-3 bg-gradient-to-r from-purple-500 to-pink-500 rounded-lg font-semibold hover:from-purple-600 hover:to-pink-600 transition-all disabled:opacity-50"
             >
-              {loading ? "封装中..." : "封装 SOL"}
+              {loading ? t("features.wrap-sol.wrapping") : t("features.wrap-sol.wrapButton")}
             </button>
             {formData.signature && (
               <div className="space-y-3 p-4 bg-white/5 rounded-lg">
                 <div>
-                  <label className="block text-sm font-medium mb-2">交易签名</label>
+                  <label className="block text-sm font-medium mb-2">{t("formUi.txSignature")}</label>
                   <div className="flex gap-2">
                     <code className="flex-1 px-3 py-2 bg-black/30 rounded text-xs break-all">
                       {formData.signature}
@@ -2558,7 +2580,7 @@ export default function Home() {
         return (
           <div className="space-y-4">
             <div>
-              <label className="block text-sm font-medium mb-2">认证方式</label>
+              <label className="block text-sm font-medium mb-2">{t("formUi.authMethod")}</label>
               <div className="grid grid-cols-3 gap-2">
                 <button
                   onClick={() => {
@@ -2574,7 +2596,7 @@ export default function Home() {
                       : "bg-white/5 text-gray-400 hover:bg-white/10"
                   }`}
                 >
-                  📁 Keystore
+                  {t("formUi.tabKeystore")}
                 </button>
                 <button
                   onClick={() => {
@@ -2590,7 +2612,7 @@ export default function Home() {
                       : "bg-white/5 text-gray-400 hover:bg-white/10"
                   }`}
                 >
-                  🔒 加密私钥
+                  {t("formUi.tabEncrypted")}
                 </button>
                 <button
                   onClick={() => {
@@ -2607,7 +2629,7 @@ export default function Home() {
                       : "bg-white/5 text-gray-400 hover:bg-white/10"
                   }`}
                 >
-                  🔑 私钥
+                  {t("formUi.tabPrivateKey")}
                 </button>
               </div>
             </div>
@@ -2615,7 +2637,7 @@ export default function Home() {
             {authMethod["unwrap-sol"] === "keystore" && (
               <>
                 <div>
-                  <label className="block text-sm font-medium mb-2">上传 Keystore 文件</label>
+                  <label className="block text-sm font-medium mb-2">{t("formUi.uploadKeystore")}</label>
                   <input
                     type="file"
                     accept=".json"
@@ -2623,17 +2645,17 @@ export default function Home() {
                     className="w-full px-4 py-2 bg-white/5 border border-white/10 rounded-lg focus:outline-none focus:ring-2 focus:ring-white/20 text-white file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:bg-white/10 file:text-white hover:file:bg-white/20"
                   />
                   {formData.keystoreJson && (
-                    <p className="mt-2 text-xs text-green-400">✓ 文件已上传</p>
+                    <p className="mt-2 text-xs text-green-400">{t("formUi.fileUploadedOk")}</p>
                   )}
                 </div>
                 <div>
-                  <label className="block text-sm font-medium mb-2">密码</label>
+                  <label className="block text-sm font-medium mb-2">{t("formUi.password")}</label>
                   <input
                     type="password"
                     value={formData.password || ""}
                     onChange={(e) => handleFormChange("password", e.target.value)}
                     className="w-full px-4 py-2 bg-white/5 border border-white/10 rounded-lg focus:outline-none focus:ring-2 focus:ring-white/20 text-white"
-                    placeholder="输入 keystore 密码"
+                    placeholder={t("formUi.placeholderKeystorePassword")}
                   />
                 </div>
               </>
@@ -2642,22 +2664,22 @@ export default function Home() {
             {authMethod["unwrap-sol"] === "encrypted" && (
               <>
                 <div>
-                  <label className="block text-sm font-medium mb-2">加密私钥</label>
+                  <label className="block text-sm font-medium mb-2">{t("formUi.encryptedKey")}</label>
                   <textarea
                     value={formData.encrypted_key || ""}
                     onChange={(e) => handleFormChange("encrypted_key", e.target.value)}
                     className="w-full px-4 py-2 bg-white/5 border border-white/10 rounded-lg focus:outline-none focus:ring-2 focus:ring-white/20 text-white min-h-[120px]"
-                    placeholder="输入加密的私钥"
+                    placeholder={t("formUi.placeholderEncryptedKey")}
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium mb-2">密码</label>
+                  <label className="block text-sm font-medium mb-2">{t("formUi.password")}</label>
                   <input
                     type="password"
                     value={formData.password || ""}
                     onChange={(e) => handleFormChange("password", e.target.value)}
                     className="w-full px-4 py-2 bg-white/5 border border-white/10 rounded-lg focus:outline-none focus:ring-2 focus:ring-white/20 text-white"
-                    placeholder="输入解密密码"
+                    placeholder={t("formUi.placeholderDecryptPassword")}
                   />
                 </div>
               </>
@@ -2665,27 +2687,27 @@ export default function Home() {
 
             {authMethod["unwrap-sol"] === "private" && (
               <div>
-                <label className="block text-sm font-medium mb-2">私钥</label>
+                <label className="block text-sm font-medium mb-2">{t("formUi.privateKey")}</label>
                 <input
                   type="password"
                   value={formData.private_key || ""}
                   onChange={(e) => handleFormChange("private_key", e.target.value)}
                   className="w-full px-4 py-2 bg-white/5 border border-white/10 rounded-lg focus:outline-none focus:ring-2 focus:ring-white/20 text-white"
-                  placeholder="输入私钥的 Base58 编码"
+                  placeholder={t("formUi.placeholderPrivateKeyBase58")}
                 />
-                <p className="mt-1 text-xs text-yellow-400">⚠️ 警告：私钥将以明文方式传输</p>
+                <p className="mt-1 text-xs text-yellow-400">{t("formUi.warnPlaintextStrong")}</p>
               </div>
             )}
 
             <div>
-              <label className="block text-sm font-medium mb-2">网络</label>
+              <label className="block text-sm font-medium mb-2">{t("features.check-balance.network")}</label>
               <select
                 value={formData.network || "mainnet"}
                 onChange={(e) => handleFormChange("network", e.target.value)}
                 className="w-full px-4 py-2 bg-white/5 border border-white/10 rounded-lg focus:outline-none focus:ring-2 focus:ring-white/20 text-white"
               >
-                <option value="mainnet">主网 (Mainnet)</option>
-                <option value="devnet">测试网 (Devnet)</option>
+                <option value="mainnet">{t("features.check-balance.mainnet")}</option>
+                <option value="devnet">{t("features.check-balance.devnet")}</option>
               </select>
             </div>
             <button
@@ -2693,12 +2715,12 @@ export default function Home() {
               disabled={loading}
               className="w-full py-3 bg-gradient-to-r from-purple-500 to-pink-500 rounded-lg font-semibold hover:from-purple-600 hover:to-pink-600 transition-all disabled:opacity-50"
             >
-              {loading ? "解封中..." : "解封所有 WSOL"}
+              {loading ? t("features.unwrap-sol.unwrapping") : t("features.unwrap-sol.unwrapButton")}
             </button>
             {formData.signature && (
               <div className="space-y-3 p-4 bg-white/5 rounded-lg">
                 <div>
-                  <label className="block text-sm font-medium mb-2">交易签名</label>
+                  <label className="block text-sm font-medium mb-2">{t("formUi.txSignature")}</label>
                   <div className="flex gap-2">
                     <code className="flex-1 px-3 py-2 bg-black/30 rounded text-xs break-all">
                       {formData.signature}
@@ -2720,7 +2742,7 @@ export default function Home() {
         return (
           <div className="space-y-4">
             <div>
-              <label className="block text-sm font-medium mb-2">认证方式</label>
+              <label className="block text-sm font-medium mb-2">{t("formUi.authMethod")}</label>
               <div className="grid grid-cols-3 gap-2">
                 <button
                   onClick={() => {
@@ -2736,7 +2758,7 @@ export default function Home() {
                       : "bg-white/5 text-gray-400 hover:bg-white/10"
                   }`}
                 >
-                  📁 Keystore
+                  {t("formUi.tabKeystore")}
                 </button>
                 <button
                   onClick={() => {
@@ -2752,7 +2774,7 @@ export default function Home() {
                       : "bg-white/5 text-gray-400 hover:bg-white/10"
                   }`}
                 >
-                  🔒 加密私钥
+                  {t("formUi.tabEncrypted")}
                 </button>
                 <button
                   onClick={() => {
@@ -2769,7 +2791,7 @@ export default function Home() {
                       : "bg-white/5 text-gray-400 hover:bg-white/10"
                   }`}
                 >
-                  🔑 私钥
+                  {t("formUi.tabPrivateKey")}
                 </button>
               </div>
             </div>
@@ -2777,7 +2799,7 @@ export default function Home() {
             {authMethod["create-nonce"] === "keystore" && (
               <>
                 <div>
-                  <label className="block text-sm font-medium mb-2">上传 Keystore 文件</label>
+                  <label className="block text-sm font-medium mb-2">{t("formUi.uploadKeystore")}</label>
                   <input
                     type="file"
                     accept=".json"
@@ -2785,17 +2807,17 @@ export default function Home() {
                     className="w-full px-4 py-2 bg-white/5 border border-white/10 rounded-lg focus:outline-none focus:ring-2 focus:ring-white/20 text-white file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:bg-white/10 file:text-white hover:file:bg-white/20"
                   />
                   {formData.keystoreJson && (
-                    <p className="mt-2 text-xs text-green-400">✓ 文件已上传</p>
+                    <p className="mt-2 text-xs text-green-400">{t("formUi.fileUploadedOk")}</p>
                   )}
                 </div>
                 <div>
-                  <label className="block text-sm font-medium mb-2">密码</label>
+                  <label className="block text-sm font-medium mb-2">{t("formUi.password")}</label>
                   <input
                     type="password"
                     value={formData.password || ""}
                     onChange={(e) => handleFormChange("password", e.target.value)}
                     className="w-full px-4 py-2 bg-white/5 border border-white/10 rounded-lg focus:outline-none focus:ring-2 focus:ring-white/20 text-white"
-                    placeholder="输入 keystore 密码"
+                    placeholder={t("formUi.placeholderKeystorePassword")}
                   />
                 </div>
               </>
@@ -2804,22 +2826,22 @@ export default function Home() {
             {authMethod["create-nonce"] === "encrypted" && (
               <>
                 <div>
-                  <label className="block text-sm font-medium mb-2">加密私钥</label>
+                  <label className="block text-sm font-medium mb-2">{t("formUi.encryptedKey")}</label>
                   <textarea
                     value={formData.encrypted_key || ""}
                     onChange={(e) => handleFormChange("encrypted_key", e.target.value)}
                     className="w-full px-4 py-2 bg-white/5 border border-white/10 rounded-lg focus:outline-none focus:ring-2 focus:ring-white/20 text-white min-h-[120px]"
-                    placeholder="输入加密的私钥"
+                    placeholder={t("formUi.placeholderEncryptedKey")}
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium mb-2">密码</label>
+                  <label className="block text-sm font-medium mb-2">{t("formUi.password")}</label>
                   <input
                     type="password"
                     value={formData.password || ""}
                     onChange={(e) => handleFormChange("password", e.target.value)}
                     className="w-full px-4 py-2 bg-white/5 border border-white/10 rounded-lg focus:outline-none focus:ring-2 focus:ring-white/20 text-white"
-                    placeholder="输入解密密码"
+                    placeholder={t("formUi.placeholderDecryptPassword")}
                   />
                 </div>
               </>
@@ -2827,27 +2849,27 @@ export default function Home() {
 
             {authMethod["create-nonce"] === "private" && (
               <div>
-                <label className="block text-sm font-medium mb-2">私钥</label>
+                <label className="block text-sm font-medium mb-2">{t("formUi.privateKey")}</label>
                 <input
                   type="password"
                   value={formData.private_key || ""}
                   onChange={(e) => handleFormChange("private_key", e.target.value)}
                   className="w-full px-4 py-2 bg-white/5 border border-white/10 rounded-lg focus:outline-none focus:ring-2 focus:ring-white/20 text-white"
-                  placeholder="输入私钥的 Base58 编码"
+                  placeholder={t("formUi.placeholderPrivateKeyBase58")}
                 />
-                <p className="mt-1 text-xs text-yellow-400">⚠️ 警告：私钥将以明文方式传输</p>
+                <p className="mt-1 text-xs text-yellow-400">{t("formUi.warnPlaintextStrong")}</p>
               </div>
             )}
 
             <div>
-              <label className="block text-sm font-medium mb-2">网络</label>
+              <label className="block text-sm font-medium mb-2">{t("features.check-balance.network")}</label>
               <select
                 value={formData.network || "mainnet"}
                 onChange={(e) => handleFormChange("network", e.target.value)}
                 className="w-full px-4 py-2 bg-white/5 border border-white/10 rounded-lg focus:outline-none focus:ring-2 focus:ring-white/20 text-white"
               >
-                <option value="mainnet">主网 (Mainnet)</option>
-                <option value="devnet">测试网 (Devnet)</option>
+                <option value="mainnet">{t("features.check-balance.mainnet")}</option>
+                <option value="devnet">{t("features.check-balance.devnet")}</option>
               </select>
             </div>
             <button
@@ -2855,12 +2877,12 @@ export default function Home() {
               disabled={loading}
               className="w-full py-3 bg-gradient-to-r from-purple-500 to-pink-500 rounded-lg font-semibold hover:from-purple-600 hover:to-pink-600 transition-all disabled:opacity-50"
             >
-              {loading ? "创建中..." : "创建 Nonce 账户"}
+              {loading ? t("features.create-nonce.creating") : t("features.create-nonce.createButton")}
             </button>
             {formData.signature && (
               <div className="space-y-3 p-4 bg-white/5 rounded-lg">
                 <div>
-                  <label className="block text-sm font-medium mb-2">Nonce 账户地址</label>
+                  <label className="block text-sm font-medium mb-2">{t("features.create-nonce.nonceAccount")}</label>
                   <div className="flex gap-2">
                     <code className="flex-1 px-3 py-2 bg-black/30 rounded text-xs break-all">
                       {formData.nonceAccount}
@@ -2874,7 +2896,7 @@ export default function Home() {
                   </div>
                 </div>
                 <div>
-                  <label className="block text-sm font-medium mb-2">交易签名</label>
+                  <label className="block text-sm font-medium mb-2">{t("formUi.txSignature")}</label>
                   <div className="flex gap-2">
                     <code className="flex-1 px-3 py-2 bg-black/30 rounded text-xs break-all">
                       {formData.signature}
@@ -2896,44 +2918,44 @@ export default function Home() {
         return (
           <div className="space-y-4">
             <div>
-              <label className="block text-sm font-medium mb-2">硬件指纹</label>
+              <label className="block text-sm font-medium mb-2">{t("features.setup-2fa.hardwareFingerprint")}</label>
               <input
                 type="text"
                 value={formData.hardware_fingerprint || ""}
                 onChange={(e) => handleFormChange("hardware_fingerprint", e.target.value)}
                 className="w-full px-4 py-2 bg-white/5 border border-white/10 rounded-lg focus:outline-none focus:ring-2 focus:ring-white/20 text-white"
-                placeholder="输入唯一的硬件指纹字符串"
+                placeholder={t("features.setup-2fa.fingerprintPlaceholder")}
               />
-              <p className="mt-1 text-xs text-gray-400">例如：机器UUID、MAC地址等唯一标识</p>
+              <p className="mt-1 text-xs text-gray-400">{t("features.setup-2fa.fingerprintHint")}</p>
             </div>
             <div>
-              <label className="block text-sm font-medium mb-2">主密码</label>
+              <label className="block text-sm font-medium mb-2">{t("features.setup-2fa.masterPassword")}</label>
               <input
                 type="password"
                 value={formData.master_password || ""}
                 onChange={(e) => handleFormChange("master_password", e.target.value)}
                 className="w-full px-4 py-2 bg-white/5 border border-white/10 rounded-lg focus:outline-none focus:ring-2 focus:ring-white/20 text-white"
-                placeholder="输入主密码（10-20字符）"
+                placeholder={t("features.setup-2fa.masterPasswordPlaceholder")}
               />
             </div>
             <div>
-              <label className="block text-sm font-medium mb-2">账户名称（可选）</label>
+              <label className="block text-sm font-medium mb-2">{t("features.setup-2fa.accountName")}</label>
               <input
                 type="text"
                 value={formData.account || ""}
                 onChange={(e) => handleFormChange("account", e.target.value)}
                 className="w-full px-4 py-2 bg-white/5 border border-white/10 rounded-lg focus:outline-none focus:ring-2 focus:ring-white/20 text-white"
-                placeholder="例如：my-wallet@solana"
+                placeholder={t("features.setup-2fa.accountPlaceholder")}
               />
             </div>
             <div>
-              <label className="block text-sm font-medium mb-2">发行者（可选）</label>
+              <label className="block text-sm font-medium mb-2">{t("features.setup-2fa.issuer")}</label>
               <input
                 type="text"
                 value={formData.issuer || ""}
                 onChange={(e) => handleFormChange("issuer", e.target.value)}
                 className="w-full px-4 py-2 bg-white/5 border border-white/10 rounded-lg focus:outline-none focus:ring-2 focus:ring-white/20 text-white"
-                placeholder="例如：Sol SafeKey"
+                placeholder={t("features.setup-2fa.issuerPlaceholder")}
               />
             </div>
             <button
@@ -2941,12 +2963,12 @@ export default function Home() {
               disabled={loading}
               className="w-full py-3 bg-gradient-to-r from-purple-500 to-pink-500 rounded-lg font-semibold hover:from-purple-600 hover:to-pink-600 transition-all disabled:opacity-50"
             >
-              {loading ? "生成中..." : "生成 2FA 密钥"}
+              {loading ? t("features.setup-2fa.generating") : t("features.setup-2fa.generateButton")}
             </button>
             {formData.totp_secret && (
               <div className="space-y-3 p-4 bg-white/5 rounded-lg">
                 <div>
-                  <label className="block text-sm font-medium mb-2">TOTP 密钥</label>
+                  <label className="block text-sm font-medium mb-2">{t("features.setup-2fa.totpSecret")}</label>
                   <div className="flex gap-2">
                     <code className="flex-1 px-3 py-2 bg-black/30 rounded text-xs break-all">
                       {formData.totp_secret}
@@ -2960,7 +2982,7 @@ export default function Home() {
                   </div>
                 </div>
                 <div>
-                  <label className="block text-sm font-medium mb-2">二维码 URL</label>
+                  <label className="block text-sm font-medium mb-2">{t("features.setup-2fa.qrCodeUrl")}</label>
                   <code className="block px-3 py-2 bg-black/30 rounded text-xs break-all">
                     {formData.qr_code_url}
                   </code>
@@ -2974,7 +2996,7 @@ export default function Home() {
         return (
           <div className="space-y-4">
             <div>
-              <label className="block text-sm font-medium mb-2">认证方式</label>
+              <label className="block text-sm font-medium mb-2">{t("formUi.authMethod")}</label>
               <div className="flex gap-2">
                 <button
                   onClick={() => {
@@ -2989,7 +3011,7 @@ export default function Home() {
                       : "bg-white/5 text-gray-400 hover:bg-white/10"
                   }`}
                 >
-                  📁 Keystore 文件（推荐）
+                  {t("formUi.keystoreRecommended")}
                 </button>
                 <button
                   onClick={() => {
@@ -3005,7 +3027,7 @@ export default function Home() {
                       : "bg-white/5 text-gray-400 hover:bg-white/10"
                   }`}
                 >
-                  🔑 私钥
+                  {t("formUi.tabPrivateKey")}
                 </button>
               </div>
             </div>
@@ -3013,7 +3035,7 @@ export default function Home() {
             {authMethod[selectedForm || ""] === "keystore" ? (
               <>
                 <div>
-                  <label className="block text-sm font-medium mb-2">上传 Keystore 文件</label>
+                  <label className="block text-sm font-medium mb-2">{t("features.create-tfa.uploadFile")}</label>
                   <input
                     type="file"
                     accept=".json"
@@ -3021,82 +3043,82 @@ export default function Home() {
                     className="w-full px-4 py-2 bg-white/5 border border-white/10 rounded-lg focus:outline-none focus:ring-2 focus:ring-white/20 text-white file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:bg-white/10 file:text-white hover:file:bg-white/20"
                   />
                   {formData.keystoreJson && (
-                    <p className="mt-2 text-xs text-green-400">✓ 文件已上传</p>
+                    <p className="mt-2 text-xs text-green-400">{t("formUi.fileUploadedOk")}</p>
                   )}
                 </div>
                 <div>
-                  <label className="block text-sm font-medium mb-2">密码</label>
+                  <label className="block text-sm font-medium mb-2">{t("features.create-tfa.password")}</label>
                   <input
                     type="password"
                     value={formData.password || ""}
                     onChange={(e) => handleFormChange("password", e.target.value)}
                     className="w-full px-4 py-2 bg-white/5 border border-white/10 rounded-lg focus:outline-none focus:ring-2 focus:ring-white/20 text-white"
-                    placeholder="输入 keystore 密码"
+                    placeholder={t("features.create-tfa.passwordPlaceholder")}
                   />
                 </div>
               </>
             ) : (
               <div>
-                <label className="block text-sm font-medium mb-2">私钥</label>
+                <label className="block text-sm font-medium mb-2">{t("features.create-tfa.privateKeyLabel")}</label>
                 <input
                   type="password"
                   value={formData.private_key || ""}
                   onChange={(e) => handleFormChange("private_key", e.target.value)}
                   className="w-full px-4 py-2 bg-white/5 border border-white/10 rounded-lg focus:outline-none focus:ring-2 focus:ring-white/20 text-white"
-                  placeholder="输入要加密的私钥"
+                  placeholder={t("features.create-tfa.privateKeyPlaceholder")}
                 />
               </div>
             )}
             <div>
-              <label className="block text-sm font-medium mb-2">TOTP 密钥</label>
+              <label className="block text-sm font-medium mb-2">{t("features.create-tfa.totpSecret")}</label>
               <input
                 type="text"
                 value={formData.totp_secret || ""}
                 onChange={(e) => handleFormChange("totp_secret", e.target.value)}
                 className="w-full px-4 py-2 bg-white/5 border border-white/10 rounded-lg focus:outline-none focus:ring-2 focus:ring-white/20 text-white"
-                placeholder="输入从功能4生成的TOTP密钥"
+                placeholder={t("features.create-tfa.totpSecretPlaceholder")}
               />
             </div>
             <div>
-              <label className="block text-sm font-medium mb-2">硬件指纹</label>
+              <label className="block text-sm font-medium mb-2">{t("features.create-tfa.hardwareFingerprint")}</label>
               <input
                 type="text"
                 value={formData.hardware_fingerprint || ""}
                 onChange={(e) => handleFormChange("hardware_fingerprint", e.target.value)}
                 className="w-full px-4 py-2 bg-white/5 border border-white/10 rounded-lg focus:outline-none focus:ring-2 focus:ring-white/20 text-white"
-                placeholder="输入硬件指纹"
+                placeholder={t("features.create-tfa.fingerprintPlaceholder")}
               />
             </div>
             <div>
-              <label className="block text-sm font-medium mb-2">主密码</label>
+              <label className="block text-sm font-medium mb-2">{t("features.create-tfa.masterPassword")}</label>
               <input
                 type="password"
                 value={formData.master_password || ""}
                 onChange={(e) => handleFormChange("master_password", e.target.value)}
                 className="w-full px-4 py-2 bg-white/5 border border-white/10 rounded-lg focus:outline-none focus:ring-2 focus:ring-white/20 text-white"
-                placeholder="输入主密码"
+                placeholder={t("features.create-tfa.masterPasswordPlaceholder")}
               />
             </div>
             <div>
-              <label className="block text-sm font-medium mb-2">安全问题索引</label>
+              <label className="block text-sm font-medium mb-2">{t("features.create-tfa.questionIndex")}</label>
               <input
                 type="number"
                 value={formData.question_index || 0}
                 onChange={(e) => handleFormChange("question_index", parseInt(e.target.value))}
                 className="w-full px-4 py-2 bg-white/5 border border-white/10 rounded-lg focus:outline-none focus:ring-2 focus:ring-white/20 text-white"
-                placeholder="0-9"
+                placeholder={t("features.create-tfa.questionIndexPlaceholder")}
                 min="0"
                 max="9"
               />
             </div>
             <div>
-              <label className="block text-sm font-medium mb-2">安全问题答案</label>
+              <label className="block text-sm font-medium mb-2">{t("features.create-tfa.securityAnswer")}</label>
               <input
                 type="text"
                 value={formData.security_answer || ""}
                 onChange={(e) => handleFormChange("security_answer", e.target.value)}
                 className="w-full px-4 py-2 bg-white/5 border border-white/10 rounded-lg focus:outline-none focus:ring-2 focus:ring-white/20 text-white"
-                placeholder="输入安全问题答案"
+                placeholder={t("features.create-tfa.answerPlaceholder")}
               />
             </div>
             <button
@@ -3104,12 +3126,12 @@ export default function Home() {
               disabled={loading}
               className="w-full py-3 bg-gradient-to-r from-purple-500 to-pink-500 rounded-lg font-semibold hover:from-purple-600 hover:to-pink-600 transition-all disabled:opacity-50"
             >
-              {loading ? "创建中..." : "创建三重钱包"}
+              {loading ? t("features.create-tfa.creating") : t("features.create-tfa.createButton")}
             </button>
             {formData.encrypted_wallet && (
               <div className="space-y-3 p-4 bg-white/5 rounded-lg">
                 <div>
-                  <label className="block text-sm font-medium mb-2">公钥</label>
+                  <label className="block text-sm font-medium mb-2">{t("features.create-plain.publicKey")}</label>
                   <div className="flex gap-2">
                     <code className="flex-1 px-3 py-2 bg-black/30 rounded text-xs break-all">
                       {formData.publicKey}
@@ -3123,8 +3145,8 @@ export default function Home() {
                   </div>
                 </div>
                 <div>
-                  <label className="block text-sm font-medium mb-2">加密钱包数据</label>
-                  <p className="text-xs text-gray-400">请妥善保存以下加密数据：</p>
+                  <label className="block text-sm font-medium mb-2">{t("features.create-tfa.encryptedWallet")}</label>
+                  <p className="text-xs text-gray-400">{t("features.create-tfa.saveHint")}</p>
                   <div className="flex gap-2">
                     <code className="flex-1 px-3 py-2 bg-black/30 rounded text-xs break-all max-h-32 overflow-y-auto">
                       {formData.encrypted_wallet}
@@ -3146,52 +3168,52 @@ export default function Home() {
         return (
           <div className="space-y-4">
             <div>
-              <label className="block text-sm font-medium mb-2">加密钱包数据</label>
+              <label className="block text-sm font-medium mb-2">{t("features.unlock-tfa.encryptedWallet")}</label>
               <textarea
                 value={formData.encrypted_wallet || ""}
                 onChange={(e) => handleFormChange("encrypted_wallet", e.target.value)}
                 className="w-full px-4 py-2 bg-white/5 border border-white/10 rounded-lg focus:outline-none focus:ring-2 focus:ring-white/20 text-white min-h-[100px]"
-                placeholder="粘贴三重钱包的加密数据"
+                placeholder={t("features.unlock-tfa.walletPlaceholder")}
               />
             </div>
             <div>
-              <label className="block text-sm font-medium mb-2">硬件指纹</label>
+              <label className="block text-sm font-medium mb-2">{t("features.unlock-tfa.hardwareFingerprint")}</label>
               <input
                 type="text"
                 value={formData.hardware_fingerprint || ""}
                 onChange={(e) => handleFormChange("hardware_fingerprint", e.target.value)}
                 className="w-full px-4 py-2 bg-white/5 border border-white/10 rounded-lg focus:outline-none focus:ring-2 focus:ring-white/20 text-white"
-                placeholder="输入硬件指纹"
+                placeholder={t("features.unlock-tfa.fingerprintPlaceholder")}
               />
             </div>
             <div>
-              <label className="block text-sm font-medium mb-2">主密码</label>
+              <label className="block text-sm font-medium mb-2">{t("features.unlock-tfa.masterPassword")}</label>
               <input
                 type="password"
                 value={formData.master_password || ""}
                 onChange={(e) => handleFormChange("master_password", e.target.value)}
                 className="w-full px-4 py-2 bg-white/5 border border-white/10 rounded-lg focus:outline-none focus:ring-2 focus:ring-white/20 text-white"
-                placeholder="输入主密码"
+                placeholder={t("features.unlock-tfa.masterPasswordPlaceholder")}
               />
             </div>
             <div>
-              <label className="block text-sm font-medium mb-2">安全问题答案</label>
+              <label className="block text-sm font-medium mb-2">{t("features.unlock-tfa.securityAnswer")}</label>
               <input
                 type="text"
                 value={formData.security_answer || ""}
                 onChange={(e) => handleFormChange("security_answer", e.target.value)}
                 className="w-full px-4 py-2 bg-white/5 border border-white/10 rounded-lg focus:outline-none focus:ring-2 focus:ring-white/20 text-white"
-                placeholder="输入安全问题答案"
+                placeholder={t("features.unlock-tfa.answerPlaceholder")}
               />
             </div>
             <div>
-              <label className="block text-sm font-medium mb-2">TOTP 验证码</label>
+              <label className="block text-sm font-medium mb-2">{t("features.unlock-tfa.totpCode")}</label>
               <input
                 type="text"
                 value={formData.totp_code || ""}
                 onChange={(e) => handleFormChange("totp_code", e.target.value)}
                 className="w-full px-4 py-2 bg-white/5 border border-white/10 rounded-lg focus:outline-none focus:ring-2 focus:ring-white/20 text-white"
-                placeholder="输入6位TOTP验证码"
+                placeholder={t("features.unlock-tfa.totpPlaceholder")}
                 maxLength={6}
               />
             </div>
@@ -3200,12 +3222,12 @@ export default function Home() {
               disabled={loading}
               className="w-full py-3 bg-gradient-to-r from-purple-500 to-pink-500 rounded-lg font-semibold hover:from-purple-600 hover:to-pink-600 transition-all disabled:opacity-50"
             >
-              {loading ? "解锁中..." : "解锁三重钱包"}
+              {loading ? t("features.unlock-tfa.unlocking") : t("features.unlock-tfa.unlockButton")}
             </button>
             {formData.private_key && (
               <div className="space-y-3 p-4 bg-white/5 rounded-lg">
                 <div>
-                  <label className="block text-sm font-medium mb-2">公钥</label>
+                  <label className="block text-sm font-medium mb-2">{t("features.create-plain.publicKey")}</label>
                   <div className="flex gap-2">
                     <code className="flex-1 px-3 py-2 bg-black/30 rounded text-xs break-all">
                       {formData.publicKey}
@@ -3219,8 +3241,8 @@ export default function Home() {
                   </div>
                 </div>
                 <div>
-                  <label className="block text-sm font-medium mb-2">私钥</label>
-                  <p className="text-xs text-red-400 mb-2">⚠️ 请妥善保管，不要分享给任何人！</p>
+                  <label className="block text-sm font-medium mb-2">{t("features.unlock-tfa.privateKey")}</label>
+                  <p className="text-xs text-red-400 mb-2">{t("formUi.privateKeyDanger")}</p>
                   <div className="flex gap-2">
                     <code className="flex-1 px-3 py-2 bg-black/30 rounded text-xs break-all">
                       {formData.private_key}
@@ -3242,7 +3264,7 @@ export default function Home() {
         return (
           <div className="space-y-4">
             <div>
-              <label className="block text-sm font-medium mb-2">认证方式</label>
+              <label className="block text-sm font-medium mb-2">{t("formUi.authMethod")}</label>
               <div className="grid grid-cols-3 gap-2">
                 <button
                   onClick={() => {
@@ -3258,7 +3280,7 @@ export default function Home() {
                       : "bg-white/5 text-gray-400 hover:bg-white/10"
                   }`}
                 >
-                  📁 Keystore
+                  {t("formUi.tabKeystore")}
                 </button>
                 <button
                   onClick={() => {
@@ -3274,7 +3296,7 @@ export default function Home() {
                       : "bg-white/5 text-gray-400 hover:bg-white/10"
                   }`}
                 >
-                  🔒 加密私钥
+                  {t("formUi.tabEncrypted")}
                 </button>
                 <button
                   onClick={() => {
@@ -3291,7 +3313,7 @@ export default function Home() {
                       : "bg-white/5 text-gray-400 hover:bg-white/10"
                   }`}
                 >
-                  🔑 私钥
+                  {t("formUi.tabPrivateKey")}
                 </button>
               </div>
             </div>
@@ -3299,7 +3321,7 @@ export default function Home() {
             {authMethod["close-wsol-ata"] === "keystore" && (
               <>
                 <div>
-                  <label className="block text-sm font-medium mb-2">上传 Keystore 文件</label>
+                  <label className="block text-sm font-medium mb-2">{t("formUi.uploadKeystore")}</label>
                   <input
                     type="file"
                     accept=".json"
@@ -3307,17 +3329,17 @@ export default function Home() {
                     className="w-full px-4 py-2 bg-white/5 border border-white/10 rounded-lg focus:outline-none focus:ring-2 focus:ring-white/20 text-white file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:bg-white/10 file:text-white hover:file:bg-white/20"
                   />
                   {formData.keystoreJson && (
-                    <p className="mt-2 text-xs text-green-400">✓ 文件已上传</p>
+                    <p className="mt-2 text-xs text-green-400">{t("formUi.fileUploadedOk")}</p>
                   )}
                 </div>
                 <div>
-                  <label className="block text-sm font-medium mb-2">密码</label>
+                  <label className="block text-sm font-medium mb-2">{t("formUi.password")}</label>
                   <input
                     type="password"
                     value={formData.password || ""}
                     onChange={(e) => handleFormChange("password", e.target.value)}
                     className="w-full px-4 py-2 bg-white/5 border border-white/10 rounded-lg focus:outline-none focus:ring-2 focus:ring-white/20 text-white"
-                    placeholder="输入 keystore 密码"
+                    placeholder={t("formUi.placeholderKeystorePassword")}
                   />
                 </div>
               </>
@@ -3326,22 +3348,22 @@ export default function Home() {
             {authMethod["close-wsol-ata"] === "encrypted" && (
               <>
                 <div>
-                  <label className="block text-sm font-medium mb-2">加密私钥</label>
+                  <label className="block text-sm font-medium mb-2">{t("formUi.encryptedKey")}</label>
                   <textarea
                     value={formData.encrypted_key || ""}
                     onChange={(e) => handleFormChange("encrypted_key", e.target.value)}
                     className="w-full px-4 py-2 bg-white/5 border border-white/10 rounded-lg focus:outline-none focus:ring-2 focus:ring-white/20 text-white min-h-[120px]"
-                    placeholder="输入加密的私钥"
+                    placeholder={t("formUi.placeholderEncryptedKey")}
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium mb-2">密码</label>
+                  <label className="block text-sm font-medium mb-2">{t("formUi.password")}</label>
                   <input
                     type="password"
                     value={formData.password || ""}
                     onChange={(e) => handleFormChange("password", e.target.value)}
                     className="w-full px-4 py-2 bg-white/5 border border-white/10 rounded-lg focus:outline-none focus:ring-2 focus:ring-white/20 text-white"
-                    placeholder="输入解密密码"
+                    placeholder={t("formUi.placeholderDecryptPassword")}
                   />
                 </div>
               </>
@@ -3349,27 +3371,27 @@ export default function Home() {
 
             {authMethod["close-wsol-ata"] === "private" && (
               <div>
-                <label className="block text-sm font-medium mb-2">私钥</label>
+                <label className="block text-sm font-medium mb-2">{t("formUi.privateKey")}</label>
                 <input
                   type="password"
                   value={formData.private_key || ""}
                   onChange={(e) => handleFormChange("private_key", e.target.value)}
                   className="w-full px-4 py-2 bg-white/5 border border-white/10 rounded-lg focus:outline-none focus:ring-2 focus:ring-white/20 text-white"
-                  placeholder="输入私钥的 Base58 编码"
+                  placeholder={t("formUi.placeholderPrivateKeyBase58")}
                 />
-                <p className="mt-1 text-xs text-yellow-400">⚠️ 警告：私钥将以明文方式传输</p>
+                <p className="mt-1 text-xs text-yellow-400">{t("formUi.warnPlaintextStrong")}</p>
               </div>
             )}
 
             <div>
-              <label className="block text-sm font-medium mb-2">网络</label>
+              <label className="block text-sm font-medium mb-2">{t("features.check-balance.network")}</label>
               <select
                 value={formData.network || "mainnet"}
                 onChange={(e) => handleFormChange("network", e.target.value)}
                 className="w-full px-4 py-2 bg-white/5 border border-white/10 rounded-lg focus:outline-none focus:ring-2 focus:ring-white/20 text-white"
               >
-                <option value="mainnet">主网 (Mainnet)</option>
-                <option value="devnet">测试网 (Devnet)</option>
+                <option value="mainnet">{t("features.check-balance.mainnet")}</option>
+                <option value="devnet">{t("features.check-balance.devnet")}</option>
               </select>
             </div>
             <button
@@ -3377,12 +3399,12 @@ export default function Home() {
               disabled={loading}
               className="w-full py-3 bg-gradient-to-r from-purple-500 to-pink-500 rounded-lg font-semibold hover:from-purple-600 hover:to-pink-600 transition-all disabled:opacity-50"
             >
-              {loading ? "关闭中..." : "关闭 WSOL ATA"}
+              {loading ? t("features.close-wsol-ata.closing") : t("features.close-wsol-ata.closeButton")}
             </button>
             {formData.signature && (
               <div className="space-y-3 p-4 bg-white/5 rounded-lg">
                 <div>
-                  <label className="block text-sm font-medium mb-2">交易签名</label>
+                  <label className="block text-sm font-medium mb-2">{t("formUi.txSignature")}</label>
                   <div className="flex gap-2">
                     <code className="flex-1 px-3 py-2 bg-black/30 rounded text-xs break-all">
                       {formData.signature}
@@ -3404,7 +3426,7 @@ export default function Home() {
         return (
           <div className="space-y-4">
             <div>
-              <label className="block text-sm font-medium mb-2">认证方式</label>
+              <label className="block text-sm font-medium mb-2">{t("formUi.authMethod")}</label>
               <div className="grid grid-cols-3 gap-2">
                 <button
                   onClick={() => {
@@ -3420,7 +3442,7 @@ export default function Home() {
                       : "bg-white/5 text-gray-400 hover:bg-white/10"
                   }`}
                 >
-                  📁 Keystore
+                  {t("formUi.tabKeystore")}
                 </button>
                 <button
                   onClick={() => {
@@ -3436,7 +3458,7 @@ export default function Home() {
                       : "bg-white/5 text-gray-400 hover:bg-white/10"
                   }`}
                 >
-                  🔒 加密私钥
+                  {t("formUi.tabEncrypted")}
                 </button>
                 <button
                   onClick={() => {
@@ -3453,7 +3475,7 @@ export default function Home() {
                       : "bg-white/5 text-gray-400 hover:bg-white/10"
                   }`}
                 >
-                  🔑 私钥
+                  {t("formUi.tabPrivateKey")}
                 </button>
               </div>
             </div>
@@ -3461,7 +3483,7 @@ export default function Home() {
             {authMethod["pumpfun-sell"] === "keystore" && (
               <>
                 <div>
-                  <label className="block text-sm font-medium mb-2">上传 Keystore 文件</label>
+                  <label className="block text-sm font-medium mb-2">{t("formUi.uploadKeystore")}</label>
                   <input
                     type="file"
                     accept=".json"
@@ -3469,17 +3491,17 @@ export default function Home() {
                     className="w-full px-4 py-2 bg-white/5 border border-white/10 rounded-lg focus:outline-none focus:ring-2 focus:ring-white/20 text-white file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:bg-white/10 file:text-white hover:file:bg-white/20"
                   />
                   {formData.keystoreJson && (
-                    <p className="mt-2 text-xs text-green-400">✓ 文件已上传</p>
+                    <p className="mt-2 text-xs text-green-400">{t("formUi.fileUploadedOk")}</p>
                   )}
                 </div>
                 <div>
-                  <label className="block text-sm font-medium mb-2">密码</label>
+                  <label className="block text-sm font-medium mb-2">{t("formUi.password")}</label>
                   <input
                     type="password"
                     value={formData.password || ""}
                     onChange={(e) => handleFormChange("password", e.target.value)}
                     className="w-full px-4 py-2 bg-white/5 border border-white/10 rounded-lg focus:outline-none focus:ring-2 focus:ring-white/20 text-white"
-                    placeholder="输入 keystore 密码"
+                    placeholder={t("formUi.placeholderKeystorePassword")}
                   />
                 </div>
               </>
@@ -3488,22 +3510,22 @@ export default function Home() {
             {authMethod["pumpfun-sell"] === "encrypted" && (
               <>
                 <div>
-                  <label className="block text-sm font-medium mb-2">加密私钥</label>
+                  <label className="block text-sm font-medium mb-2">{t("formUi.encryptedKey")}</label>
                   <textarea
                     value={formData.encrypted_key || ""}
                     onChange={(e) => handleFormChange("encrypted_key", e.target.value)}
                     className="w-full px-4 py-2 bg-white/5 border border-white/10 rounded-lg focus:outline-none focus:ring-2 focus:ring-white/20 text-white min-h-[120px]"
-                    placeholder="输入加密的私钥"
+                    placeholder={t("formUi.placeholderEncryptedKey")}
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium mb-2">密码</label>
+                  <label className="block text-sm font-medium mb-2">{t("formUi.password")}</label>
                   <input
                     type="password"
                     value={formData.password || ""}
                     onChange={(e) => handleFormChange("password", e.target.value)}
                     className="w-full px-4 py-2 bg-white/5 border border-white/10 rounded-lg focus:outline-none focus:ring-2 focus:ring-white/20 text-white"
-                    placeholder="输入解密密码"
+                    placeholder={t("formUi.placeholderDecryptPassword")}
                   />
                 </div>
               </>
@@ -3511,61 +3533,61 @@ export default function Home() {
 
             {authMethod["pumpfun-sell"] === "private" && (
               <div>
-                <label className="block text-sm font-medium mb-2">私钥</label>
+                <label className="block text-sm font-medium mb-2">{t("features.pumpfun-sell.privateKeyLabel")}</label>
                 <input
                   type="password"
                   value={formData.private_key || ""}
                   onChange={(e) => handleFormChange("private_key", e.target.value)}
                   className="w-full px-4 py-2 bg-white/5 border border-white/10 rounded-lg focus:outline-none focus:ring-2 focus:ring-white/20 text-white"
-                  placeholder="输入私钥的 Base58 编码"
+                  placeholder={t("features.pumpfun-sell.privateKeyPlaceholder")}
                 />
-                <p className="mt-1 text-xs text-yellow-400">⚠️ 警告：私钥将以明文方式传输</p>
+                <p className="mt-1 text-xs text-yellow-400">{t("formUi.warnPlaintextStrong")}</p>
               </div>
             )}
 
             <div>
-              <label className="block text-sm font-medium mb-2">代币 Mint 地址</label>
+              <label className="block text-sm font-medium mb-2">{t("features.pumpfun-sell.mintAddress")}</label>
               <input
                 type="text"
                 value={formData.mint || ""}
                 onChange={(e) => handleFormChange("mint", e.target.value)}
                 className="w-full px-4 py-2 bg-white/5 border border-white/10 rounded-lg focus:outline-none focus:ring-2 focus:ring-white/20 text-white"
-                placeholder="输入代币的 mint 地址"
+                placeholder={t("features.pumpfun-sell.mintPlaceholder")}
               />
             </div>
             <div>
-              <label className="block text-sm font-medium mb-2">卖出数量</label>
+              <label className="block text-sm font-medium mb-2">{t("features.pumpfun-sell.amount")}</label>
               <input
                 type="number"
                 step="0.000001"
                 value={formData.amount || ""}
                 onChange={(e) => handleFormChange("amount", e.target.value)}
                 className="w-full px-4 py-2 bg-white/5 border border-white/10 rounded-lg focus:outline-none focus:ring-2 focus:ring-white/20 text-white"
-                placeholder="输入要卖出的代币数量"
+                placeholder={t("features.pumpfun-sell.amountPlaceholder")}
               />
             </div>
             <div>
-              <label className="block text-sm font-medium mb-2">滑点容忍度 (%)</label>
+              <label className="block text-sm font-medium mb-2">{t("features.pumpfun-sell.slippage")}</label>
               <input
                 type="number"
                 step="0.1"
                 value={formData.slippage || 1}
                 onChange={(e) => handleFormChange("slippage", parseFloat(e.target.value))}
                 className="w-full px-4 py-2 bg-white/5 border border-white/10 rounded-lg focus:outline-none focus:ring-2 focus:ring-white/20 text-white"
-                placeholder="默认 1%"
+                placeholder={t("features.pumpfun-sell.slippagePlaceholder")}
                 min="0"
                 max="100"
               />
             </div>
             <div>
-              <label className="block text-sm font-medium mb-2">网络</label>
+              <label className="block text-sm font-medium mb-2">{t("features.check-balance.network")}</label>
               <select
                 value={formData.network || "mainnet"}
                 onChange={(e) => handleFormChange("network", e.target.value)}
                 className="w-full px-4 py-2 bg-white/5 border border-white/10 rounded-lg focus:outline-none focus:ring-2 focus:ring-white/20 text-white"
               >
-                <option value="mainnet">主网 (Mainnet)</option>
-                <option value="devnet">测试网 (Devnet)</option>
+                <option value="mainnet">{t("features.check-balance.mainnet")}</option>
+                <option value="devnet">{t("features.check-balance.devnet")}</option>
               </select>
             </div>
             <button
@@ -3573,11 +3595,11 @@ export default function Home() {
               disabled={loading}
               className="w-full py-3 bg-gradient-to-r from-purple-500 to-pink-500 rounded-lg font-semibold hover:from-purple-600 hover:to-pink-600 transition-all disabled:opacity-50"
             >
-              {loading ? "卖出中..." : "卖出代币 (Pump.fun)"}
+              {loading ? t("features.pumpfun-sell.selling") : t("features.pumpfun-sell.sellButton")}
             </button>
             {formData.status === "success" && (
               <div className="p-4 bg-green-500/10 border border-green-500/20 rounded-lg">
-                <p className="text-green-400">✅ 卖出成功！</p>
+                <p className="text-green-400">{t("formUi.sellSuccess")}</p>
               </div>
             )}
           </div>
@@ -3587,7 +3609,7 @@ export default function Home() {
         return (
           <div className="space-y-4">
             <div>
-              <label className="block text-sm font-medium mb-2">认证方式</label>
+              <label className="block text-sm font-medium mb-2">{t("formUi.authMethod")}</label>
               <div className="grid grid-cols-3 gap-2">
                 <button
                   onClick={() => {
@@ -3603,7 +3625,7 @@ export default function Home() {
                       : "bg-white/5 text-gray-400 hover:bg-white/10"
                   }`}
                 >
-                  📁 Keystore
+                  {t("formUi.tabKeystore")}
                 </button>
                 <button
                   onClick={() => {
@@ -3619,7 +3641,7 @@ export default function Home() {
                       : "bg-white/5 text-gray-400 hover:bg-white/10"
                   }`}
                 >
-                  🔒 加密私钥
+                  {t("formUi.tabEncrypted")}
                 </button>
                 <button
                   onClick={() => {
@@ -3636,7 +3658,7 @@ export default function Home() {
                       : "bg-white/5 text-gray-400 hover:bg-white/10"
                   }`}
                 >
-                  🔑 私钥
+                  {t("formUi.tabPrivateKey")}
                 </button>
               </div>
             </div>
@@ -3644,7 +3666,7 @@ export default function Home() {
             {authMethod["pumpswap-sell"] === "keystore" && (
               <>
                 <div>
-                  <label className="block text-sm font-medium mb-2">上传 Keystore 文件</label>
+                  <label className="block text-sm font-medium mb-2">{t("formUi.uploadKeystore")}</label>
                   <input
                     type="file"
                     accept=".json"
@@ -3652,17 +3674,17 @@ export default function Home() {
                     className="w-full px-4 py-2 bg-white/5 border border-white/10 rounded-lg focus:outline-none focus:ring-2 focus:ring-white/20 text-white file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:bg-white/10 file:text-white hover:file:bg-white/20"
                   />
                   {formData.keystoreJson && (
-                    <p className="mt-2 text-xs text-green-400">✓ 文件已上传</p>
+                    <p className="mt-2 text-xs text-green-400">{t("formUi.fileUploadedOk")}</p>
                   )}
                 </div>
                 <div>
-                  <label className="block text-sm font-medium mb-2">密码</label>
+                  <label className="block text-sm font-medium mb-2">{t("formUi.password")}</label>
                   <input
                     type="password"
                     value={formData.password || ""}
                     onChange={(e) => handleFormChange("password", e.target.value)}
                     className="w-full px-4 py-2 bg-white/5 border border-white/10 rounded-lg focus:outline-none focus:ring-2 focus:ring-white/20 text-white"
-                    placeholder="输入 keystore 密码"
+                    placeholder={t("formUi.placeholderKeystorePassword")}
                   />
                 </div>
               </>
@@ -3671,22 +3693,22 @@ export default function Home() {
             {authMethod["pumpswap-sell"] === "encrypted" && (
               <>
                 <div>
-                  <label className="block text-sm font-medium mb-2">加密私钥</label>
+                  <label className="block text-sm font-medium mb-2">{t("formUi.encryptedKey")}</label>
                   <textarea
                     value={formData.encrypted_key || ""}
                     onChange={(e) => handleFormChange("encrypted_key", e.target.value)}
                     className="w-full px-4 py-2 bg-white/5 border border-white/10 rounded-lg focus:outline-none focus:ring-2 focus:ring-white/20 text-white min-h-[120px]"
-                    placeholder="输入加密的私钥"
+                    placeholder={t("formUi.placeholderEncryptedKey")}
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium mb-2">密码</label>
+                  <label className="block text-sm font-medium mb-2">{t("formUi.password")}</label>
                   <input
                     type="password"
                     value={formData.password || ""}
                     onChange={(e) => handleFormChange("password", e.target.value)}
                     className="w-full px-4 py-2 bg-white/5 border border-white/10 rounded-lg focus:outline-none focus:ring-2 focus:ring-white/20 text-white"
-                    placeholder="输入解密密码"
+                    placeholder={t("formUi.placeholderDecryptPassword")}
                   />
                 </div>
               </>
@@ -3694,61 +3716,61 @@ export default function Home() {
 
             {authMethod["pumpswap-sell"] === "private" && (
               <div>
-                <label className="block text-sm font-medium mb-2">私钥</label>
+                <label className="block text-sm font-medium mb-2">{t("features.pumpswap-sell.privateKeyLabel")}</label>
                 <input
                   type="password"
                   value={formData.private_key || ""}
                   onChange={(e) => handleFormChange("private_key", e.target.value)}
                   className="w-full px-4 py-2 bg-white/5 border border-white/10 rounded-lg focus:outline-none focus:ring-2 focus:ring-white/20 text-white"
-                  placeholder="输入私钥的 Base58 编码"
+                  placeholder={t("features.pumpswap-sell.privateKeyPlaceholder")}
                 />
-                <p className="mt-1 text-xs text-yellow-400">⚠️ 警告：私钥将以明文方式传输</p>
+                <p className="mt-1 text-xs text-yellow-400">{t("formUi.warnPlaintextStrong")}</p>
               </div>
             )}
 
             <div>
-              <label className="block text-sm font-medium mb-2">代币 Mint 地址</label>
+              <label className="block text-sm font-medium mb-2">{t("features.pumpswap-sell.mintAddress")}</label>
               <input
                 type="text"
                 value={formData.mint || ""}
                 onChange={(e) => handleFormChange("mint", e.target.value)}
                 className="w-full px-4 py-2 bg-white/5 border border-white/10 rounded-lg focus:outline-none focus:ring-2 focus:ring-white/20 text-white"
-                placeholder="输入代币的 mint 地址"
+                placeholder={t("features.pumpswap-sell.mintPlaceholder")}
               />
             </div>
             <div>
-              <label className="block text-sm font-medium mb-2">卖出数量</label>
+              <label className="block text-sm font-medium mb-2">{t("features.pumpswap-sell.amount")}</label>
               <input
                 type="number"
                 step="0.000001"
                 value={formData.amount || ""}
                 onChange={(e) => handleFormChange("amount", e.target.value)}
                 className="w-full px-4 py-2 bg-white/5 border border-white/10 rounded-lg focus:outline-none focus:ring-2 focus:ring-white/20 text-white"
-                placeholder="输入要卖出的代币数量"
+                placeholder={t("features.pumpswap-sell.amountPlaceholder")}
               />
             </div>
             <div>
-              <label className="block text-sm font-medium mb-2">滑点容忍度 (%)</label>
+              <label className="block text-sm font-medium mb-2">{t("features.pumpswap-sell.slippage")}</label>
               <input
                 type="number"
                 step="0.1"
                 value={formData.slippage || 1}
                 onChange={(e) => handleFormChange("slippage", parseFloat(e.target.value))}
                 className="w-full px-4 py-2 bg-white/5 border border-white/10 rounded-lg focus:outline-none focus:ring-2 focus:ring-white/20 text-white"
-                placeholder="默认 1%"
+                placeholder={t("features.pumpswap-sell.slippagePlaceholder")}
                 min="0"
                 max="100"
               />
             </div>
             <div>
-              <label className="block text-sm font-medium mb-2">网络</label>
+              <label className="block text-sm font-medium mb-2">{t("features.check-balance.network")}</label>
               <select
                 value={formData.network || "mainnet"}
                 onChange={(e) => handleFormChange("network", e.target.value)}
                 className="w-full px-4 py-2 bg-white/5 border border-white/10 rounded-lg focus:outline-none focus:ring-2 focus:ring-white/20 text-white"
               >
-                <option value="mainnet">主网 (Mainnet)</option>
-                <option value="devnet">测试网 (Devnet)</option>
+                <option value="mainnet">{t("features.check-balance.mainnet")}</option>
+                <option value="devnet">{t("features.check-balance.devnet")}</option>
               </select>
             </div>
             <button
@@ -3756,11 +3778,11 @@ export default function Home() {
               disabled={loading}
               className="w-full py-3 bg-gradient-to-r from-purple-500 to-pink-500 rounded-lg font-semibold hover:from-purple-600 hover:to-pink-600 transition-all disabled:opacity-50"
             >
-              {loading ? "卖出中..." : "卖出代币 (PumpSwap)"}
+              {loading ? t("features.pumpswap-sell.selling") : t("features.pumpswap-sell.sellButton")}
             </button>
             {formData.status === "success" && (
               <div className="p-4 bg-green-500/10 border border-green-500/20 rounded-lg">
-                <p className="text-green-400">✅ 卖出成功！</p>
+                <p className="text-green-400">{t("formUi.sellSuccess")}</p>
               </div>
             )}
           </div>
@@ -3771,7 +3793,7 @@ export default function Home() {
         return (
           <div className="space-y-4">
             <div>
-              <label className="block text-sm font-medium mb-2">认证方式</label>
+              <label className="block text-sm font-medium mb-2">{t("formUi.authMethod")}</label>
               <div className="flex gap-2">
                 <button
                   onClick={() => {
@@ -3786,7 +3808,7 @@ export default function Home() {
                       : "bg-white/5 text-gray-400 hover:bg-white/10"
                   }`}
                 >
-                  📁 Keystore 文件（推荐）
+                  {t("formUi.keystoreRecommended")}
                 </button>
                 <button
                   onClick={() => {
@@ -3802,7 +3824,7 @@ export default function Home() {
                       : "bg-white/5 text-gray-400 hover:bg-white/10"
                   }`}
                 >
-                  🔑 私钥
+                  {t("formUi.tabPrivateKey")}
                 </button>
               </div>
             </div>
@@ -3810,7 +3832,7 @@ export default function Home() {
             {authMethod[selectedForm || ""] === "keystore" ? (
               <>
                 <div>
-                  <label className="block text-sm font-medium mb-2">上传 Keystore 文件</label>
+                  <label className="block text-sm font-medium mb-2">{t("formUi.uploadKeystore")}</label>
                   <input
                     type="file"
                     accept=".json"
@@ -3818,42 +3840,42 @@ export default function Home() {
                     className="w-full px-4 py-2 bg-white/5 border border-white/10 rounded-lg focus:outline-none focus:ring-2 focus:ring-white/20 text-white file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:bg-white/10 file:text-white hover:file:bg-white/20"
                   />
                   {formData.keystoreJson && (
-                    <p className="mt-2 text-xs text-green-400">✓ 文件已上传</p>
+                    <p className="mt-2 text-xs text-green-400">{t("formUi.fileUploadedOk")}</p>
                   )}
                 </div>
                 <div>
-                  <label className="block text-sm font-medium mb-2">密码</label>
+                  <label className="block text-sm font-medium mb-2">{t("formUi.password")}</label>
                   <input
                     type="password"
                     value={formData.password || ""}
                     onChange={(e) => handleFormChange("password", e.target.value)}
                     className="w-full px-4 py-2 bg-white/5 border border-white/10 rounded-lg focus:outline-none focus:ring-2 focus:ring-white/20 text-white"
-                    placeholder="输入 keystore 密码"
+                    placeholder={t("formUi.placeholderKeystorePassword")}
                   />
                 </div>
               </>
             ) : (
               <div>
-                <label className="block text-sm font-medium mb-2">私钥</label>
+                <label className="block text-sm font-medium mb-2">{t("formUi.privateKey")}</label>
                 <input
                   type="password"
                   value={formData.private_key || ""}
                   onChange={(e) => handleFormChange("private_key", e.target.value)}
                   className="w-full px-4 py-2 bg-white/5 border border-white/10 rounded-lg focus:outline-none focus:ring-2 focus:ring-white/20 text-white"
-                  placeholder="输入私钥的 Base58 编码"
+                  placeholder={t("formUi.placeholderPrivateKeyBase58")}
                 />
               </div>
             )}
 
             <div>
-              <label className="block text-sm font-medium mb-2">网络</label>
+              <label className="block text-sm font-medium mb-2">{t("features.check-balance.network")}</label>
               <select
                 value={formData.network || "mainnet"}
                 onChange={(e) => handleFormChange("network", e.target.value)}
                 className="w-full px-4 py-2 bg-white/5 border border-white/10 rounded-lg focus:outline-none focus:ring-2 focus:ring-white/20 text-white"
               >
-                <option value="mainnet">主网 (Mainnet)</option>
-                <option value="devnet">测试网 (Devnet)</option>
+                <option value="mainnet">{t("features.check-balance.mainnet")}</option>
+                <option value="devnet">{t("features.check-balance.devnet")}</option>
               </select>
             </div>
             <button
@@ -3861,7 +3883,13 @@ export default function Home() {
               disabled={loading}
               className="w-full py-3 bg-gradient-to-r from-purple-500 to-pink-500 rounded-lg font-semibold hover:from-purple-600 hover:to-pink-600 transition-all disabled:opacity-50"
             >
-              {loading ? "处理中..." : "领取返现"}
+              {loading
+                ? selectedForm === "pumpswap-cashback"
+                  ? t("features.pumpswap-cashback.claiming")
+                  : t("features.pumpfun-cashback.claiming")
+                : selectedForm === "pumpswap-cashback"
+                  ? t("features.pumpswap-cashback.claimButton")
+                  : t("features.pumpfun-cashback.claimButton")}
             </button>
             {formData.message && (
               <div className="p-4 bg-blue-500/10 border border-blue-500/20 rounded-lg">
@@ -3872,7 +3900,7 @@ export default function Home() {
         );
 
       default:
-        return <div className="text-center text-gray-400">选择一个功能开始使用</div>;
+        return <div className="text-center text-gray-400">{t("formUi.pickFeature")}</div>;
     }
   };
 

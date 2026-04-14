@@ -1,14 +1,15 @@
 use axum::{body::Body, http::{StatusCode, Uri}, response::{IntoResponse, Response}, routing::{get, post}, Json, Router};
+use tower_http::cors::{Any, CorsLayer};
 use rust_embed::RustEmbed;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use solana_sdk::pubkey::Pubkey;
 use solana_sdk::signature::Keypair;
-use solana_sdk::signature::Signer as SolanaSigner;
+use solana_sdk::signature::Signer;
 use std::net::SocketAddr;
 use std::str::FromStr;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
-use sol_safekey::{KeyManager, Signer};
+use sol_safekey::KeyManager;
 use sol_safekey::solana_utils::{SolanaClient, lamports_to_sol};
 use sol_safekey::operations::Language;
 
@@ -24,7 +25,6 @@ struct Assets;
 
 const DEFAULT_RPC_URL: &str = "https://api.mainnet-beta.solana.com";
 const DEVNET_RPC_URL: &str = "https://api.devnet.solana.com";
-const WSOL_MINT: &str = "So11111111111111111111111111111111111111112";
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
@@ -66,9 +66,20 @@ async fn main() -> anyhow::Result<()> {
         .route("/api/transfer/token", post(transfer_token))
         // Nonce Operations (14)
         .route("/api/nonce/create", post(create_nonce_account))
-        .fallback(serve_assets);
+        .fallback(serve_assets)
+        .layer(
+            CorsLayer::new()
+                .allow_origin(Any)
+                .allow_methods(Any)
+                .allow_headers(Any),
+        );
 
-    let addr = SocketAddr::from(([0, 0, 0, 0], 3001));
+    const DEFAULT_PORT: u16 = 3841;
+    let port: u16 = std::env::var("PORT")
+        .ok()
+        .and_then(|s| s.parse().ok())
+        .unwrap_or(DEFAULT_PORT);
+    let addr = SocketAddr::from(([0, 0, 0, 0], port));
     let listener = tokio::net::TcpListener::bind(addr).await?;
     tracing::info!("Server listening on http://{}", addr);
     axum::serve(listener, app).await?;
@@ -290,7 +301,6 @@ async fn create_wsol_ata(Json(req): Json<CreateWsolAtaRequest>) -> Result<Json<C
     // Use tokio runtime to run async function
     let signature = tokio::task::spawn_blocking(move || {
         let rt = tokio::runtime::Runtime::new().unwrap();
-        let client = SolanaClient::new(rpc_url.to_string());
 
         rt.block_on(async {
             let sdk_client = sol_safekey::solana_utils::SolanaClientSdk::new(rpc_url.to_string(), false);
@@ -600,6 +610,8 @@ async fn unlock_triple_factor_wallet(Json(req): Json<UnlockTripleFactorRequest>)
     #[serde(default)]
     password: Option<String>,
     mint: String,
+    /// Accepted from API clients; pump sell path uses mint + slippage (amount reserved for future use).
+    #[allow(dead_code)]
     amount: f64,
     #[serde(default)] slippage: Option<u64>,
     #[serde(default)] network: Option<String>,
@@ -649,7 +661,10 @@ async fn pumpfun_sell(Json(req): Json<PumpfunSellRequest>) -> Result<Json<Pumpfu
     keystore_json: Option<String>,
     #[serde(default)]
     password: Option<String>,
-    #[serde(default)] network: Option<String>,
+    /// Reserved for RPC selection when cashback is implemented server-side.
+    #[allow(dead_code)]
+    #[serde(default)]
+    network: Option<String>,
 }
 #[derive(Serialize)] struct PumpfunCashbackResponse { status: String, message: String }
 
@@ -680,6 +695,8 @@ async fn pumpfun_cashback(Json(req): Json<PumpfunCashbackRequest>) -> Result<Jso
     #[serde(default)]
     password: Option<String>,
     mint: String,
+    /// Accepted from API clients; sell path uses mint + slippage (amount reserved for future use).
+    #[allow(dead_code)]
     amount: f64,
     #[serde(default)] slippage: Option<u64>,
     #[serde(default)] network: Option<String>,
@@ -729,7 +746,10 @@ async fn pumpswap_sell(Json(req): Json<PumpswapSellRequest>) -> Result<Json<Pump
     keystore_json: Option<String>,
     #[serde(default)]
     password: Option<String>,
-    #[serde(default)] network: Option<String>,
+    /// Reserved for RPC selection when cashback is implemented server-side.
+    #[allow(dead_code)]
+    #[serde(default)]
+    network: Option<String>,
 }
 #[derive(Serialize)] struct PumpswapCashbackResponse { status: String, message: String }
 

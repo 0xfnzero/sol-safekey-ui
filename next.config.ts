@@ -9,6 +9,15 @@ const nextConfig: NextConfig = {
   distDir: 'out',
   basePath: '',
   trailingSlash: true,
+  /** Dev-only: same-origin `/api` → Rust backend, avoids CORS when UI is on localhost:3840 */
+  async rewrites() {
+    return [
+      {
+        source: "/api/:path*",
+        destination: "http://127.0.0.1:3841/api/:path*",
+      },
+    ];
+  },
 };
 
 export default withNextIntl(nextConfig);

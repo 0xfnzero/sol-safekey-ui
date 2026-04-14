@@ -38,7 +38,12 @@ async fn main() -> anyhow::Result<()> {
         .route("/api/transfer/sol", post(transfer_sol))
         .fallback(serve_assets);
 
-    let addr = SocketAddr::from(([0, 0, 0, 0], 3001));
+    const DEFAULT_PORT: u16 = 3841;
+    let port: u16 = std::env::var("PORT")
+        .ok()
+        .and_then(|s| s.parse().ok())
+        .unwrap_or(DEFAULT_PORT);
+    let addr = SocketAddr::from(([0, 0, 0, 0], port));
     let listener = tokio::net::TcpListener::bind(addr).await?;
     tracing::info!("Server listening on http://{}", addr);
 

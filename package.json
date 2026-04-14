@@ -3,13 +3,20 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "next dev",
+    "dev": "next dev -p 3840",
+    "predev:stack": "node scripts/ensure-out.cjs && node scripts/free-api-port.cjs",
+    "dev:stack": "concurrently -k -n next,api \"next dev -p 3840\" \"cargo run --release\"",
+    "backend": "cargo run --release",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "tauri": "tauri",
+    "desktop:dev": "tauri dev",
+    "desktop:build": "tauri build"
   },
   "dependencies": {
     "@base-ui/react": "^1.3.0",
+    "@tauri-apps/api": "^2.10.1",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "lucide-react": "^0.577.0",
@@ -24,10 +31,12 @@
   },
   "devDependencies": {
     "@eslint/eslintrc": "^3.3.5",
+    "@tauri-apps/cli": "^2.10.1",
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "autoprefixer": "^10.4.27",
+    "concurrently": "^9.2.1",
     "eslint": "^9",
     "eslint-config-next": "15.1.6",
     "postcss": "^8.5.8",

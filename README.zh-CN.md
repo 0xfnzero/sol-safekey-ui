@@ -106,40 +106,65 @@
 
 ### 前置要求
 
-- Node.js 18+
-- npm 或 yarn
-- 后端 API 服务运行在 `http://localhost:3001`
+- **Node.js** 18+
+- **npm** 或 **yarn**
+- **Rust**（stable）— 运行 HTTP API（`cargo run`）和 Tauri 桌面壳都需要
+- **sol-safekey** 与本仓库**同级目录**：根目录 `Cargo.toml` 使用 `path = "../sol-safekey"`，请把 [sol-safekey](https://github.com/0xfnzero/sol-safekey) 克隆到上一级目录，例如：
+
+  ```
+  你的工作目录/
+    sol-safekey/      # 依赖库
+    sol-safekey-ui/   # 本仓库
+  ```
+
+- **仅桌面端：** 还需满足 [Tauri 2 环境要求](https://v2.tauri.app/start/prerequisites/)（系统编译器、WebView 等）
 
 ### 安装
 
 ```bash
-# 克隆项目
 git clone https://github.com/0xfnzero/sol-safekey-ui.git
 cd sol-safekey-ui
-
-# 安装依赖
 npm install
 ```
 
-### 运行
+### 启动 — Web 浏览器
+
+默认端口：**Next 前端 3840**，**Rust API 3841**。
+
+| 需求 | 命令 | 浏览器访问 |
+|------|------|------------|
+| **只要界面**（无后端，链上操作会失败） | `npm run dev` | `http://localhost:3840/zh/` 或 `http://localhost:3840/en/` |
+| **前端 + API**（本地开发推荐） | `npm run dev:stack` | 同上；开发时 `/api` 会转发到 `http://127.0.0.1:3841` |
+| **只起后端**（例如前端已在别的终端跑） | `npm run backend` | 需自行保证 3840 上仍有页面服务 |
+
+### 启动 — 桌面端（Tauri）
 
 ```bash
-# 启动开发服务器
-npm run dev
-
-# 在浏览器中打开
-open http://localhost:3000
+npm run desktop:dev
 ```
 
-### 构建
+会通过 Tauri 的 `beforeDevCommand` 拉起与 `dev:stack` 相同的一键栈（Next + API），再打开原生窗口。
+
+- **打安装包 / 发布构建：** `npm run desktop:build`（产物在 `src-tauri/target/` 及系统对应的安装包目录）
+
+### 构建（静态导出）
 
 ```bash
-# 生产环境构建
 npm run build
-
-# 启动生产服务器
-npm start
 ```
+
+生成目录为 `out/`（供 Rust 内嵌静态资源与 Tauri 使用）。
+
+### 提交代码到 GitHub
+
+```bash
+git add .
+git status
+git commit -m "chore: 说明本次修改"
+git push origin main
+```
+
+若默认分支不是 `main`，请改成你的分支名。
 
 ## 📖 使用说明
 

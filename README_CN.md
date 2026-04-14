@@ -49,18 +49,26 @@
 
 ## 快速开始
 
-### 开发模式
+更完整的步骤（含 Web / 桌面 / Git）见 **[README.zh-CN.md](./README.zh-CN.md)**。
 
-使用热重载功能进行开发：
+### 开发模式（npm，推荐）
+
+- **前端**：默认 **3840**；**API**：**3841**。
+- 需同级目录存在 **`../sol-safekey`**（见 `Cargo.toml`）。
+
+| 场景 | 命令 | 说明 |
+|------|------|------|
+| 仅 Next 界面 | `npm run dev` | 无 API 时无法调钱包接口 |
+| 前端 + API | `npm run dev:stack` | 本地开发推荐 |
+| 桌面 Tauri | `npm run desktop:dev` | 一键起 Next + API 并打开窗口 |
+
+浏览器访问：`http://localhost:3840/zh/` 或 `http://localhost:3840/en/`。
+
+也可以使用脚本（若存在）：
 
 ```bash
 ./dev.sh
 ```
-
-这将：
-1. 启动自动重载的 Rust 后端
-2. 启动 Next.js 开发服务器
-3. 在浏览器中打开 http://localhost:3000
 
 ### 生产构建
 
@@ -87,7 +95,7 @@
 ./target/release/sol-safekey-ui
 ```
 
-Web UI 将在 **http://localhost:3001** 访问
+Web UI 将在 **http://localhost:3841** 访问
 
 ## 使用方法
 
@@ -204,7 +212,7 @@ Web UI 将在 **http://localhost:3001** 访问
 - RPC 地址:
   - 主网: `https://api.mainnet-beta.solana.com`
   - 测试网: `https://api.devnet.solana.com`
-- 服务器端口: `3001`
+- 服务器端口: `3841`
 
 **切换网络**:
 在支持的操作中使用网络下拉菜单，或修改 `main.rs` 中的 `DEFAULT_RPC_URL`。
@@ -256,7 +264,7 @@ cargo build --release
 ## 故障排除
 
 **服务器无法启动**:
-- 检查端口 3001 是否已被占用: `lsof -i :3001`
+- 检查端口 3841 是否已被占用: `lsof -i :3841`
 - 终止现有进程: `pkill -f sol-safekey-ui`
 
 **前端未更新**:

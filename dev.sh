@@ -8,8 +8,12 @@ echo "🚀 Starting Sol SafeKey UI in development mode..."
 
 # Check if running backend
 if [ "$1" == "backend" ]; then
-    echo "🦀 Starting Rust backend..."
-    cargo run
+    echo "🦀 Starting Rust API (sol-safekey-ui on :3841)..."
+    if [ ! -d "out" ]; then
+      echo "📦 Building static out/ for rust-embed..."
+      npm run build
+    fi
+    cargo run --release
     exit 0
 fi
 
@@ -25,9 +29,14 @@ echo "Usage:"
 echo "  ./dev.sh backend  - Start Rust backend only"
 echo "  ./dev.sh frontend - Start Next.js frontend only"
 echo ""
-echo "For development, run frontend and backend in separate terminals:"
+echo "Recommended (Next + API together):"
+echo "  npm run dev:stack"
+echo "Or Tauri desktop:"
+echo "  npm run desktop:dev"
+echo ""
+echo "Or two terminals:"
 echo "  Terminal 1: ./dev.sh backend"
 echo "  Terminal 2: ./dev.sh frontend"
 echo ""
-echo "Frontend will be at http://localhost:3000"
-echo "Backend API will be at http://localhost:3001"
+echo "Frontend: http://localhost:3840"
+echo "Backend API: http://localhost:3841"
