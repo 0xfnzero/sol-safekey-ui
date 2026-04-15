@@ -19,6 +19,36 @@ fn keypair_from_base58_safe(private_key: &str) -> Result<Keypair, String> {
         .map_err(|e| format!("无效的私钥格式: {}", e))
 }
 
+/// UI 三 tab 顺序：1) 加密私钥字符串 2) keystore.json 3) 明文 base58 私钥（解析优先级与此一致）
+fn keypair_from_wallet_tabs(
+    encrypted_key: Option<&String>,
+    keystore_json: Option<&String>,
+    password: Option<&String>,
+    private_key: Option<&String>,
+) -> Result<Keypair, ApiError> {
+    if let Some(enc) = encrypted_key.filter(|s| !s.trim().is_empty()) {
+        let pw = password.ok_or_else(|| ApiError {
+            message: "使用加密私钥时需要提供密码".to_string(),
+        })?;
+        let secret = KeyManager::decrypt_with_password(enc, pw)
+            .map_err(|e| ApiError { message: format!("解密失败: {}", e) })?;
+        return keypair_from_base58_safe(&secret).map_err(|e| ApiError { message: e });
+    }
+    if let Some(json) = keystore_json.filter(|s| !s.trim().is_empty()) {
+        let pw = password.ok_or_else(|| ApiError {
+            message: "使用 keystore 时需要提供密码".to_string(),
+        })?;
+        return KeyManager::keypair_from_encrypted_json(json, pw)
+            .map_err(|e| ApiError { message: format!("keystore 解密失败: {}", e) });
+    }
+    let pk = private_key
+        .filter(|s| !s.trim().is_empty())
+        .ok_or_else(|| ApiError {
+            message: "需要提供私钥、加密私钥或 keystore".to_string(),
+        })?;
+    keypair_from_base58_safe(pk).map_err(|e| ApiError { message: e })
+}
+
 #[derive(RustEmbed)]
 #[folder = "out"]
 struct Assets;
@@ -238,6 +268,8 @@ async fn get_pubkey(Json(req): Json<GetPubkeyRequest>) -> Result<Json<GetPubkeyR
     #[serde(default)]
     keystore_json: Option<String>,
     #[serde(default)]
+    encrypted_key: Option<String>,
+    #[serde(default)]
     password: Option<String>,
     to_address: String,
     amount: f64,
@@ -248,15 +280,12 @@ async fn get_pubkey(Json(req): Json<GetPubkeyRequest>) -> Result<Json<GetPubkeyR
 async fn transfer_sol(Json(req): Json<TransferSolRequest>) -> Result<Json<TransferSolResponse>, ApiError> {
     let to_pubkey = Pubkey::from_str(&req.to_address).map_err(|_| ApiError { message: "无效的接收地址".to_string() })?;
 
-    // Get keypair from either private_key or keystore+password
-    let keypair = if let Some(json) = req.keystore_json {
-        let password = req.password.ok_or_else(|| ApiError { message: "使用 keystore 时需要提供密码".to_string() })?;
-        KeyManager::keypair_from_encrypted_json(&json, &password)
-            .map_err(|e| ApiError { message: format!("keystore 解密失败: {}", e) })?
-    } else {
-        let private_key = req.private_key.ok_or_else(|| ApiError { message: "需要提供私钥或 keystore".to_string() })?;
-        keypair_from_base58_safe(&private_key).map_err(|e| ApiError { message: e })?
-    };
+    let keypair = keypair_from_wallet_tabs(
+        req.encrypted_key.as_ref(),
+        req.keystore_json.as_ref(),
+        req.password.as_ref(),
+        req.private_key.as_ref(),
+    )?;
 
     let amount_lamports = (req.amount * 1_000_000_000.0) as u64;
     let rpc_url = get_rpc_url(req.network.as_deref());
@@ -280,21 +309,20 @@ async fn transfer_sol(Json(req): Json<TransferSolRequest>) -> Result<Json<Transf
     #[serde(default)]
     keystore_json: Option<String>,
     #[serde(default)]
+    encrypted_key: Option<String>,
+    #[serde(default)]
     password: Option<String>,
     #[serde(default)] network: Option<String>,
 }
 #[derive(Serialize)] struct CreateWsolAtaResponse { signature: String, status: String }
 
 async fn create_wsol_ata(Json(req): Json<CreateWsolAtaRequest>) -> Result<Json<CreateWsolAtaResponse>, ApiError> {
-    // Get keypair from either private_key or keystore+password
-    let keypair = if let Some(json) = req.keystore_json {
-        let password = req.password.ok_or_else(|| ApiError { message: "使用 keystore 时需要提供密码".to_string() })?;
-        KeyManager::keypair_from_encrypted_json(&json, &password)
-            .map_err(|e| ApiError { message: format!("keystore 解密失败: {}", e) })?
-    } else {
-        let private_key = req.private_key.ok_or_else(|| ApiError { message: "需要提供私钥或 keystore".to_string() })?;
-        keypair_from_base58_safe(&private_key).map_err(|e| ApiError { message: e })?
-    };
+    let keypair = keypair_from_wallet_tabs(
+        req.encrypted_key.as_ref(),
+        req.keystore_json.as_ref(),
+        req.password.as_ref(),
+        req.private_key.as_ref(),
+    )?;
 
     let rpc_url = get_rpc_url(req.network.as_deref());
 
@@ -322,6 +350,8 @@ async fn create_wsol_ata(Json(req): Json<CreateWsolAtaRequest>) -> Result<Json<C
     #[serde(default)]
     keystore_json: Option<String>,
     #[serde(default)]
+    encrypted_key: Option<String>,
+    #[serde(default)]
     password: Option<String>,
     amount: f64,
     #[serde(default)] network: Option<String>,
@@ -329,15 +359,12 @@ async fn create_wsol_ata(Json(req): Json<CreateWsolAtaRequest>) -> Result<Json<C
 #[derive(Serialize)] struct WrapSolResponse { signature: String, status: String }
 
 async fn wrap_sol(Json(req): Json<WrapSolRequest>) -> Result<Json<WrapSolResponse>, ApiError> {
-    // Get keypair from either private_key or keystore+password
-    let keypair = if let Some(json) = req.keystore_json {
-        let password = req.password.ok_or_else(|| ApiError { message: "使用 keystore 时需要提供密码".to_string() })?;
-        KeyManager::keypair_from_encrypted_json(&json, &password)
-            .map_err(|e| ApiError { message: format!("keystore 解密失败: {}", e) })?
-    } else {
-        let private_key = req.private_key.ok_or_else(|| ApiError { message: "需要提供私钥或 keystore".to_string() })?;
-        keypair_from_base58_safe(&private_key).map_err(|e| ApiError { message: e })?
-    };
+    let keypair = keypair_from_wallet_tabs(
+        req.encrypted_key.as_ref(),
+        req.keystore_json.as_ref(),
+        req.password.as_ref(),
+        req.private_key.as_ref(),
+    )?;
 
     let amount_lamports = (req.amount * 1_000_000_000.0) as u64;
     let rpc_url = get_rpc_url(req.network.as_deref());
@@ -359,21 +386,20 @@ async fn wrap_sol(Json(req): Json<WrapSolRequest>) -> Result<Json<WrapSolRespons
     #[serde(default)]
     keystore_json: Option<String>,
     #[serde(default)]
+    encrypted_key: Option<String>,
+    #[serde(default)]
     password: Option<String>,
     #[serde(default)] network: Option<String>,
 }
 #[derive(Serialize)] struct UnwrapSolResponse { signature: String, status: String }
 
 async fn unwrap_sol(Json(req): Json<UnwrapSolRequest>) -> Result<Json<UnwrapSolResponse>, ApiError> {
-    // Get keypair from either private_key or keystore+password
-    let keypair = if let Some(json) = req.keystore_json {
-        let password = req.password.ok_or_else(|| ApiError { message: "使用 keystore 时需要提供密码".to_string() })?;
-        KeyManager::keypair_from_encrypted_json(&json, &password)
-            .map_err(|e| ApiError { message: format!("keystore 解密失败: {}", e) })?
-    } else {
-        let private_key = req.private_key.ok_or_else(|| ApiError { message: "需要提供私钥或 keystore".to_string() })?;
-        keypair_from_base58_safe(&private_key).map_err(|e| ApiError { message: e })?
-    };
+    let keypair = keypair_from_wallet_tabs(
+        req.encrypted_key.as_ref(),
+        req.keystore_json.as_ref(),
+        req.password.as_ref(),
+        req.private_key.as_ref(),
+    )?;
 
     let rpc_url = get_rpc_url(req.network.as_deref());
     let client = SolanaClient::new(rpc_url.to_string());
@@ -394,21 +420,20 @@ async fn unwrap_sol(Json(req): Json<UnwrapSolRequest>) -> Result<Json<UnwrapSolR
     #[serde(default)]
     keystore_json: Option<String>,
     #[serde(default)]
+    encrypted_key: Option<String>,
+    #[serde(default)]
     password: Option<String>,
     #[serde(default)] network: Option<String>,
 }
 #[derive(Serialize)] struct CloseWsolAtaResponse { signature: String, status: String }
 
 async fn close_wsol_ata(Json(req): Json<CloseWsolAtaRequest>) -> Result<Json<CloseWsolAtaResponse>, ApiError> {
-    // Get keypair from either private_key or keystore+password
-    let keypair = if let Some(json) = req.keystore_json {
-        let password = req.password.ok_or_else(|| ApiError { message: "使用 keystore 时需要提供密码".to_string() })?;
-        KeyManager::keypair_from_encrypted_json(&json, &password)
-            .map_err(|e| ApiError { message: format!("keystore 解密失败: {}", e) })?
-    } else {
-        let private_key = req.private_key.ok_or_else(|| ApiError { message: "需要提供私钥或 keystore".to_string() })?;
-        keypair_from_base58_safe(&private_key).map_err(|e| ApiError { message: e })?
-    };
+    let keypair = keypair_from_wallet_tabs(
+        req.encrypted_key.as_ref(),
+        req.keystore_json.as_ref(),
+        req.password.as_ref(),
+        req.private_key.as_ref(),
+    )?;
 
     let rpc_url = get_rpc_url(req.network.as_deref());
     let client = SolanaClient::new(rpc_url.to_string());
@@ -432,6 +457,8 @@ async fn close_wsol_ata(Json(req): Json<CloseWsolAtaRequest>) -> Result<Json<Clo
     #[serde(default)]
     keystore_json: Option<String>,
     #[serde(default)]
+    encrypted_key: Option<String>,
+    #[serde(default)]
     password: Option<String>,
     to_address: String,
     mint: String,
@@ -445,15 +472,12 @@ async fn transfer_token(Json(req): Json<TransferTokenRequest>) -> Result<Json<Tr
     let to_pubkey = Pubkey::from_str(&req.to_address).map_err(|_| ApiError { message: "无效的接收地址".to_string() })?;
     let mint = Pubkey::from_str(&req.mint).map_err(|_| ApiError { message: "无效的mint地址".to_string() })?;
 
-    // Get keypair from either private_key or keystore+password
-    let keypair = if let Some(json) = req.keystore_json {
-        let password = req.password.ok_or_else(|| ApiError { message: "使用 keystore 时需要提供密码".to_string() })?;
-        KeyManager::keypair_from_encrypted_json(&json, &password)
-            .map_err(|e| ApiError { message: format!("keystore 解密失败: {}", e) })?
-    } else {
-        let private_key = req.private_key.ok_or_else(|| ApiError { message: "需要提供私钥或 keystore".to_string() })?;
-        keypair_from_base58_safe(&private_key).map_err(|e| ApiError { message: e })?
-    };
+    let keypair = keypair_from_wallet_tabs(
+        req.encrypted_key.as_ref(),
+        req.keystore_json.as_ref(),
+        req.password.as_ref(),
+        req.private_key.as_ref(),
+    )?;
 
     let rpc_url = get_rpc_url(req.network.as_deref());
     let client = SolanaClient::new(rpc_url.to_string());
@@ -479,21 +503,20 @@ async fn transfer_token(Json(req): Json<TransferTokenRequest>) -> Result<Json<Tr
     #[serde(default)]
     keystore_json: Option<String>,
     #[serde(default)]
+    encrypted_key: Option<String>,
+    #[serde(default)]
     password: Option<String>,
     #[serde(default)] network: Option<String>,
 }
 #[derive(Serialize)] struct CreateNonceAccountResponse { nonce_account: String, signature: String, status: String }
 
 async fn create_nonce_account(Json(req): Json<CreateNonceAccountRequest>) -> Result<Json<CreateNonceAccountResponse>, ApiError> {
-    // Get keypair from either private_key or keystore+password
-    let keypair = if let Some(json) = req.keystore_json {
-        let password = req.password.ok_or_else(|| ApiError { message: "使用 keystore 时需要提供密码".to_string() })?;
-        KeyManager::keypair_from_encrypted_json(&json, &password)
-            .map_err(|e| ApiError { message: format!("keystore 解密失败: {}", e) })?
-    } else {
-        let private_key = req.private_key.ok_or_else(|| ApiError { message: "需要提供私钥或 keystore".to_string() })?;
-        keypair_from_base58_safe(&private_key).map_err(|e| ApiError { message: e })?
-    };
+    let keypair = keypair_from_wallet_tabs(
+        req.encrypted_key.as_ref(),
+        req.keystore_json.as_ref(),
+        req.password.as_ref(),
+        req.private_key.as_ref(),
+    )?;
 
     let rpc_url = get_rpc_url(req.network.as_deref());
     let client = SolanaClient::new(rpc_url.to_string());
@@ -542,7 +565,14 @@ async fn setup_2fa(Json(req): Json<Setup2faRequest>) -> Result<Json<Setup2faResp
 
 // 5. Create Triple-Factor Wallet
 #[derive(Deserialize)] struct CreateTripleFactorRequest {
-    private_key: String,
+    #[serde(default)]
+    private_key: Option<String>,
+    #[serde(default)]
+    keystore_json: Option<String>,
+    #[serde(default)]
+    encrypted_key: Option<String>,
+    #[serde(default)]
+    password: Option<String>,
     totp_secret: String,
     hardware_fingerprint: String,
     master_password: String,
@@ -552,8 +582,16 @@ async fn setup_2fa(Json(req): Json<Setup2faRequest>) -> Result<Json<Setup2faResp
 #[derive(Serialize)] struct CreateTripleFactorResponse { encrypted_wallet: String, public_key: String }
 
 async fn create_triple_factor_wallet(Json(req): Json<CreateTripleFactorRequest>) -> Result<Json<CreateTripleFactorResponse>, ApiError> {
+    let keypair = keypair_from_wallet_tabs(
+        req.encrypted_key.as_ref(),
+        req.keystore_json.as_ref(),
+        req.password.as_ref(),
+        req.private_key.as_ref(),
+    )?;
+    let private_key = keypair.to_base58_string();
+
     let encrypted = sol_safekey::encrypt_with_triple_factor(
-        &req.private_key,
+        &private_key,
         &req.totp_secret,
         &req.hardware_fingerprint,
         &req.master_password,
@@ -562,7 +600,7 @@ async fn create_triple_factor_wallet(Json(req): Json<CreateTripleFactorRequest>)
     ).map_err(|e| ApiError { message: format!("加密失败: {}", e) })?;
 
     // Get public key from private key
-    let public_key = KeyManager::get_public_key(&req.private_key)
+    let public_key = KeyManager::get_public_key(&private_key)
         .map_err(|e| ApiError { message: format!("获取公钥失败: {}", e) })?;
 
     Ok(Json(CreateTripleFactorResponse {
@@ -608,6 +646,8 @@ async fn unlock_triple_factor_wallet(Json(req): Json<UnlockTripleFactorRequest>)
     #[serde(default)]
     keystore_json: Option<String>,
     #[serde(default)]
+    encrypted_key: Option<String>,
+    #[serde(default)]
     password: Option<String>,
     mint: String,
     /// Accepted from API clients; pump sell path uses mint + slippage (amount reserved for future use).
@@ -619,14 +659,12 @@ async fn unlock_triple_factor_wallet(Json(req): Json<UnlockTripleFactorRequest>)
 #[derive(Serialize)] struct PumpfunSellResponse { status: String }
 
 async fn pumpfun_sell(Json(req): Json<PumpfunSellRequest>) -> Result<Json<PumpfunSellResponse>, ApiError> {
-    let keypair = if let Some(json) = req.keystore_json {
-        let password = req.password.ok_or_else(|| ApiError { message: "使用 keystore 时需要提供密码".to_string() })?;
-        KeyManager::keypair_from_encrypted_json(&json, &password)
-            .map_err(|e| ApiError { message: format!("keystore 解密失败: {}", e) })?
-    } else {
-        let private_key = req.private_key.ok_or_else(|| ApiError { message: "需要提供私钥或 keystore".to_string() })?;
-        Keypair::from_base58_string(&private_key)
-    };
+    let keypair = keypair_from_wallet_tabs(
+        req.encrypted_key.as_ref(),
+        req.keystore_json.as_ref(),
+        req.password.as_ref(),
+        req.private_key.as_ref(),
+    )?;
 
     let rpc_url = get_rpc_url(req.network.as_deref());
     let slippage = req.slippage.unwrap_or(100); // Default 1% slippage
@@ -660,6 +698,8 @@ async fn pumpfun_sell(Json(req): Json<PumpfunSellRequest>) -> Result<Json<Pumpfu
     #[serde(default)]
     keystore_json: Option<String>,
     #[serde(default)]
+    encrypted_key: Option<String>,
+    #[serde(default)]
     password: Option<String>,
     /// Reserved for RPC selection when cashback is implemented server-side.
     #[allow(dead_code)]
@@ -669,14 +709,12 @@ async fn pumpfun_sell(Json(req): Json<PumpfunSellRequest>) -> Result<Json<Pumpfu
 #[derive(Serialize)] struct PumpfunCashbackResponse { status: String, message: String }
 
 async fn pumpfun_cashback(Json(req): Json<PumpfunCashbackRequest>) -> Result<Json<PumpfunCashbackResponse>, ApiError> {
-    let _keypair = if let Some(json) = req.keystore_json {
-        let password = req.password.ok_or_else(|| ApiError { message: "使用 keystore 时需要提供密码".to_string() })?;
-        KeyManager::keypair_from_encrypted_json(&json, &password)
-            .map_err(|e| ApiError { message: format!("keystore 解密失败: {}", e) })?
-    } else {
-        let private_key = req.private_key.ok_or_else(|| ApiError { message: "需要提供私钥或 keystore".to_string() })?;
-        keypair_from_base58_safe(&private_key).map_err(|e| ApiError { message: e })?
-    };
+    let _keypair = keypair_from_wallet_tabs(
+        req.encrypted_key.as_ref(),
+        req.keystore_json.as_ref(),
+        req.password.as_ref(),
+        req.private_key.as_ref(),
+    )?;
 
     // Cashback functionality is complex and requires interactive CLI
     // For now, return a message directing users to use the CLI
@@ -693,6 +731,8 @@ async fn pumpfun_cashback(Json(req): Json<PumpfunCashbackRequest>) -> Result<Jso
     #[serde(default)]
     keystore_json: Option<String>,
     #[serde(default)]
+    encrypted_key: Option<String>,
+    #[serde(default)]
     password: Option<String>,
     mint: String,
     /// Accepted from API clients; sell path uses mint + slippage (amount reserved for future use).
@@ -704,14 +744,12 @@ async fn pumpfun_cashback(Json(req): Json<PumpfunCashbackRequest>) -> Result<Jso
 #[derive(Serialize)] struct PumpswapSellResponse { status: String }
 
 async fn pumpswap_sell(Json(req): Json<PumpswapSellRequest>) -> Result<Json<PumpswapSellResponse>, ApiError> {
-    let keypair = if let Some(json) = req.keystore_json {
-        let password = req.password.ok_or_else(|| ApiError { message: "使用 keystore 时需要提供密码".to_string() })?;
-        KeyManager::keypair_from_encrypted_json(&json, &password)
-            .map_err(|e| ApiError { message: format!("keystore 解密失败: {}", e) })?
-    } else {
-        let private_key = req.private_key.ok_or_else(|| ApiError { message: "需要提供私钥或 keystore".to_string() })?;
-        Keypair::from_base58_string(&private_key)
-    };
+    let keypair = keypair_from_wallet_tabs(
+        req.encrypted_key.as_ref(),
+        req.keystore_json.as_ref(),
+        req.password.as_ref(),
+        req.private_key.as_ref(),
+    )?;
 
     let rpc_url = get_rpc_url(req.network.as_deref());
     let slippage = req.slippage.unwrap_or(100); // Default 1% slippage
@@ -745,6 +783,8 @@ async fn pumpswap_sell(Json(req): Json<PumpswapSellRequest>) -> Result<Json<Pump
     #[serde(default)]
     keystore_json: Option<String>,
     #[serde(default)]
+    encrypted_key: Option<String>,
+    #[serde(default)]
     password: Option<String>,
     /// Reserved for RPC selection when cashback is implemented server-side.
     #[allow(dead_code)]
@@ -754,14 +794,12 @@ async fn pumpswap_sell(Json(req): Json<PumpswapSellRequest>) -> Result<Json<Pump
 #[derive(Serialize)] struct PumpswapCashbackResponse { status: String, message: String }
 
 async fn pumpswap_cashback(Json(req): Json<PumpswapCashbackRequest>) -> Result<Json<PumpswapCashbackResponse>, ApiError> {
-    let _keypair = if let Some(json) = req.keystore_json {
-        let password = req.password.ok_or_else(|| ApiError { message: "使用 keystore 时需要提供密码".to_string() })?;
-        KeyManager::keypair_from_encrypted_json(&json, &password)
-            .map_err(|e| ApiError { message: format!("keystore 解密失败: {}", e) })?
-    } else {
-        let private_key = req.private_key.ok_or_else(|| ApiError { message: "需要提供私钥或 keystore".to_string() })?;
-        Keypair::from_base58_string(&private_key)
-    };
+    let _keypair = keypair_from_wallet_tabs(
+        req.encrypted_key.as_ref(),
+        req.keystore_json.as_ref(),
+        req.password.as_ref(),
+        req.private_key.as_ref(),
+    )?;
 
     // Cashback functionality is complex and requires interactive CLI
     // For now, return a message directing users to use the CLI

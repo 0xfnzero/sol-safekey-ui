@@ -42,6 +42,68 @@ interface ApiRequestBody {
   [key: string]: string | number | undefined;
 }
 
+/** 与 UI 一致：① keystore.json ② 加密私钥字符串 ③ 明文私钥 */
+type WalletAuthTab = "keystore" | "encrypted" | "private";
+
+function encryptedKeyFromForm(formData: FormState): string {
+  return String(
+    (formData as Record<string, unknown>).encrypted_key ??
+      (formData as Record<string, unknown>).encryptedKey ??
+      ""
+  ).trim();
+}
+
+function validateWalletAuth(
+  method: WalletAuthTab,
+  formData: FormState,
+  privateField: "private_key" | "secret_key",
+): boolean {
+  if (method === "keystore") {
+    return !!(String(formData.keystoreJson ?? "").trim() && formData.password);
+  }
+  if (method === "encrypted") {
+    return !!(encryptedKeyFromForm(formData) && formData.password);
+  }
+  const raw =
+    privateField === "secret_key" ? formData.secretKey : formData.private_key;
+  return !!String(raw ?? "").trim();
+}
+
+function applyWalletAuth(
+  body: ApiRequestBody,
+  method: WalletAuthTab,
+  formData: FormState,
+  privateField: "private_key" | "secret_key",
+) {
+  if (method === "keystore") {
+    body.keystore_json = String(formData.keystoreJson ?? "").trim();
+    body.password = formData.password;
+  } else if (method === "encrypted") {
+    body.encrypted_key = encryptedKeyFromForm(formData);
+    body.password = formData.password;
+  } else {
+    const raw =
+      privateField === "secret_key" ? formData.secretKey : formData.private_key;
+    const v = String(raw ?? "").trim();
+    if (privateField === "secret_key") body.secret_key = v;
+    else body.private_key = v;
+  }
+}
+
+/** 滑点百分比（如 1 表示 1%）→ 后端 basis points（×100），空则默认 1% */
+function slippagePercentToBasisPoints(v: string | number | undefined): number {
+  if (v === undefined || v === "") return 100;
+  const n = typeof v === "number" ? v : parseFloat(String(v));
+  if (Number.isNaN(n)) return 100;
+  return Math.floor(n * 100);
+}
+
+function slippageInputDisplay(v: string | number | undefined): number {
+  if (v === undefined || v === "") return 1;
+  const n = typeof v === "number" ? v : parseFloat(String(v));
+  return Number.isNaN(n) ? 1 : n;
+}
+
 export default function Home() {
   const t = useTranslations();
 
@@ -133,12 +195,22 @@ export default function Home() {
   const [loading, setLoading] = useState(false);
   const [authMethod, setAuthMethod] = useState<{ [key: string]: "keystore" | "private" | "encrypted" }>({});
 
+  const walletAuth = (formId: string): WalletAuthTab =>
+    (authMethod[formId] ?? "keystore") as WalletAuthTab;
+
   const toggleMenu = (menuId: string) => {
     setActiveMenu(activeMenu === menuId ? null : menuId);
   };
 
-  const handleFormChange = (field: string, value: string | number) => {
-    setFormData((prev) => ({ ...prev, [field]: value }));
+  const handleFormChange = (field: string, value: string | number | undefined) => {
+    setFormData((prev) => {
+      if (value === undefined) {
+        const next = { ...prev };
+        delete next[field];
+        return next;
+      }
+      return { ...prev, [field]: value };
+    });
   };
 
   const clearForm = () => {
@@ -152,7 +224,8 @@ export default function Home() {
     const formsWithAuthMethod = [
       "decrypt", "unlock", "get-pubkey", "transfer-sol", "transfer-token",
       "create-wsol-ata", "wrap-sol", "unwrap-sol", "close-wsol-ata",
-      "create-nonce", "pumpfun-sell", "pumpswap-sell", "create-tfa"
+      "create-nonce", "pumpfun-sell", "pumpswap-sell", "create-tfa",
+      "pumpfun-cashback", "pumpswap-cashback",
     ];
     if (formsWithAuthMethod.includes(formId)) {
       setAuthMethod({ ...authMethod, [formId]: "keystore" });
@@ -310,7 +383,7 @@ export default function Home() {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
-              keystoreJson: formData.keystoreJson,
+              keystore_json: formData.keystoreJson,
               password: formData.password,
             }),
           });
@@ -330,60 +403,138 @@ export default function Home() {
         }
 
         case "decrypt": {
-          if (!formData.encrypted_key || !formData.password) {
-            toast.error(t("features.decrypt.fillAllFields"));
-            setLoading(false);
-            return;
-          }
-
-          const response = await apiFetch("keys/decrypt", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              encrypted_key: formData.encrypted_key,
-              password: formData.password,
-            }),
-          });
-          const data = await response.json();
-
-          if (response.ok) {
-            toast.success(t("features.decrypt.success"));
-            setFormData((prev) => ({
-              ...prev,
-              secretKey: data.secret_key,
-            }));
+          const dm = walletAuth("decrypt");
+          if (dm === "keystore") {
+            if (!validateWalletAuth(dm, formData, "private_key")) {
+              toast.error(t("features.unlock.fillAllFields"));
+              setLoading(false);
+              return;
+            }
+            const response = await apiFetch("wallet/unlock", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                keystore_json: String(formData.keystoreJson ?? "").trim(),
+                password: formData.password,
+              }),
+            });
+            const data = await response.json();
+            if (response.ok) {
+              toast.success(t("features.decrypt.success"));
+              setFormData((prev) => ({ ...prev, secretKey: data.secret_key }));
+            } else {
+              toast.error(data.error || t("features.decrypt.error"));
+            }
+          } else if (dm === "encrypted") {
+            if (!validateWalletAuth(dm, formData, "private_key")) {
+              toast.error(t("features.decrypt.fillAllFields"));
+              setLoading(false);
+              return;
+            }
+            const response = await apiFetch("keys/decrypt", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                encrypted_key: encryptedKeyFromForm(formData),
+                password: formData.password,
+              }),
+            });
+            const data = await response.json();
+            if (response.ok) {
+              toast.success(t("features.decrypt.success"));
+              setFormData((prev) => ({ ...prev, secretKey: data.secret_key }));
+            } else {
+              toast.error(data.error || t("features.decrypt.error"));
+            }
           } else {
-            toast.error(data.error || t("features.decrypt.error"));
+            if (!String(formData.secretKey ?? "").trim()) {
+              toast.error(t("features.get-pubkey.enterPrivateKey"));
+              setLoading(false);
+              return;
+            }
+            toast.success(t("features.decrypt.success"));
           }
           break;
         }
 
         case "unlock": {
-          if (!formData.keystoreJson || !formData.password) {
+          const um = walletAuth("unlock");
+          if (!validateWalletAuth(um, formData, "secret_key")) {
             toast.error(t("features.unlock.fillAllFields"));
             setLoading(false);
             return;
           }
-
-          const response = await apiFetch("wallet/unlock", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              keystore_json: formData.keystoreJson,
-              password: formData.password,
-            }),
-          });
-          const data = await response.json();
-
-          if (response.ok) {
-            toast.success(t("features.unlock.success"));
-            setFormData((prev) => ({
-              ...prev,
-              publicKey: data.public_key,
-              secretKey: data.secret_key,
-            }));
+          if (um === "keystore") {
+            const response = await apiFetch("wallet/unlock", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                keystore_json: String(formData.keystoreJson ?? "").trim(),
+                password: formData.password,
+              }),
+            });
+            const data = await response.json();
+            if (response.ok) {
+              toast.success(t("features.unlock.success"));
+              setFormData((prev) => ({
+                ...prev,
+                publicKey: data.public_key,
+                secretKey: data.secret_key,
+              }));
+            } else {
+              toast.error(data.error || t("features.unlock.error"));
+            }
+          } else if (um === "encrypted") {
+            const decRes = await apiFetch("keys/decrypt", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                encrypted_key: encryptedKeyFromForm(formData),
+                password: formData.password,
+              }),
+            });
+            const decData = await decRes.json();
+            if (!decRes.ok) {
+              toast.error(decData.error || t("features.unlock.error"));
+              setLoading(false);
+              return;
+            }
+            const secret = decData.secret_key as string;
+            const pkRes = await apiFetch("wallet/get-pubkey", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ secret_key: secret }),
+            });
+            const pkData = await pkRes.json();
+            if (pkRes.ok) {
+              toast.success(t("features.unlock.success"));
+              setFormData((prev) => ({
+                ...prev,
+                publicKey: pkData.public_key,
+                secretKey: secret,
+              }));
+            } else {
+              toast.error(pkData.error || t("features.unlock.error"));
+            }
           } else {
-            toast.error(data.error || t("features.unlock.error"));
+            const pkRes = await apiFetch("wallet/get-pubkey", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                secret_key: String(formData.secretKey ?? "").trim(),
+              }),
+            });
+            const pkData = await pkRes.json();
+            if (pkRes.ok) {
+              toast.success(t("features.unlock.success"));
+              setFormData((prev) => ({
+                ...prev,
+                publicKey: pkData.public_key,
+                secretKey: formData.secretKey,
+              }));
+            } else {
+              toast.error(pkData.error || t("features.unlock.error"));
+            }
           }
           break;
         }
@@ -424,39 +575,21 @@ export default function Home() {
         }
 
         case "get-pubkey": {
-          const method = authMethod["get-pubkey"] || "private";
-
-          if (method === "keystore") {
-            if (!formData.keystoreJson || !formData.password) {
-              toast.error(t("features.get-pubkey.uploadKeystore"));
-              setLoading(false);
-              return;
-            }
-          } else if (method === "encrypted") {
-            if (!formData.encryptedKey || !formData.password) {
-              toast.error(t("features.get-pubkey.enterEncrypted"));
-              setLoading(false);
-              return;
-            }
-          } else {
-            if (!formData.secretKey) {
-              toast.error(t("features.get-pubkey.enterPrivateKey"));
-              setLoading(false);
-              return;
-            }
+          const method = walletAuth("get-pubkey");
+          if (!validateWalletAuth(method, formData, "secret_key")) {
+            toast.error(
+              method === "keystore"
+                ? t("features.get-pubkey.uploadKeystore")
+                : method === "encrypted"
+                  ? t("features.get-pubkey.enterEncrypted")
+                  : t("features.get-pubkey.enterPrivateKey"),
+            );
+            setLoading(false);
+            return;
           }
 
           const requestBody: ApiRequestBody = {};
-
-          if (method === "keystore") {
-            requestBody.keystore_json = formData.keystoreJson;
-            requestBody.password = formData.password;
-          } else if (method === "encrypted") {
-            requestBody.encrypted_key = formData.encryptedKey;
-            requestBody.password = formData.password;
-          } else {
-            requestBody.secret_key = formData.secretKey;
-          }
+          applyWalletAuth(requestBody, method, formData, "secret_key");
 
           const response = await apiFetch("wallet/get-pubkey", {
             method: "POST",
@@ -478,20 +611,16 @@ export default function Home() {
         }
 
         case "transfer-sol": {
-          // Check if using keystore or private key
-          const usingKeystore = !!formData.keystoreJson;
-          if (usingKeystore) {
-            if (!formData.keystoreJson || !formData.password || !formData.to_address || !formData.amount) {
-              toast.error(t("features.transfer-sol.fillAllFields"));
-              setLoading(false);
-              return;
-            }
-          } else {
-            if (!formData.private_key || !formData.to_address || !formData.amount) {
-              toast.error(t("features.transfer-sol.fillAllFields"));
-              setLoading(false);
-              return;
-            }
+          const m = walletAuth("transfer-sol");
+          if (!formData.to_address || formData.amount === undefined || formData.amount === "") {
+            toast.error(t("features.transfer-sol.fillAllFields"));
+            setLoading(false);
+            return;
+          }
+          if (!validateWalletAuth(m, formData, "private_key")) {
+            toast.error(t("features.transfer-sol.fillAllFields"));
+            setLoading(false);
+            return;
           }
 
           const requestBody: ApiRequestBody = {
@@ -499,13 +628,7 @@ export default function Home() {
             amount: parseFloat(formData.amount as string),
             network: formData.network || "mainnet",
           };
-
-          if (usingKeystore) {
-            requestBody.keystore_json = formData.keystoreJson;
-            requestBody.password = formData.password;
-          } else {
-            requestBody.private_key = formData.private_key;
-          }
+          applyWalletAuth(requestBody, m, formData, "private_key");
 
           const response = await apiFetch("transfer/sol", {
             method: "POST",
@@ -527,20 +650,16 @@ export default function Home() {
         }
 
         case "transfer-token": {
-          // Check if using keystore or private key
-          const usingKeystore = !!formData.keystoreJson;
-          if (usingKeystore) {
-            if (!formData.keystoreJson || !formData.password || !formData.to_address || !formData.mint || !formData.amount) {
-              toast.error(t("features.transfer-token.fillAllFields"));
-              setLoading(false);
-              return;
-            }
-          } else {
-            if (!formData.private_key || !formData.to_address || !formData.mint || !formData.amount) {
-              toast.error(t("features.transfer-token.fillAllFields"));
-              setLoading(false);
-              return;
-            }
+          const m = walletAuth("transfer-token");
+          if (!formData.to_address || !formData.mint || formData.amount === undefined || formData.amount === "") {
+            toast.error(t("features.transfer-token.fillAllFields"));
+            setLoading(false);
+            return;
+          }
+          if (!validateWalletAuth(m, formData, "private_key")) {
+            toast.error(t("features.transfer-token.fillAllFields"));
+            setLoading(false);
+            return;
           }
 
           const requestBody: ApiRequestBody = {
@@ -550,13 +669,7 @@ export default function Home() {
             decimals: parseInt(formData.decimals as string) || 9,
             network: formData.network || "mainnet",
           };
-
-          if (usingKeystore) {
-            requestBody.keystore_json = formData.keystoreJson;
-            requestBody.password = formData.password;
-          } else {
-            requestBody.private_key = formData.private_key;
-          }
+          applyWalletAuth(requestBody, m, formData, "private_key");
 
           const response = await apiFetch("transfer/token", {
             method: "POST",
@@ -578,32 +691,23 @@ export default function Home() {
         }
 
         case "create-wsol-ata": {
-          // Check if using keystore or private key
-          const usingKeystore = !!formData.keystoreJson;
-          if (usingKeystore) {
-            if (!formData.keystoreJson || !formData.password) {
-              toast.error(t("features.create-wsol-ata.uploadKeystore"));
-              setLoading(false);
-              return;
-            }
-          } else {
-            if (!formData.private_key) {
-              toast.error(t("features.create-wsol-ata.enterPrivateKey"));
-              setLoading(false);
-              return;
-            }
+          const m = walletAuth("create-wsol-ata");
+          if (!validateWalletAuth(m, formData, "private_key")) {
+            toast.error(
+              m === "keystore"
+                ? t("features.create-wsol-ata.uploadKeystore")
+                : m === "encrypted"
+                  ? t("features.decrypt.fillAllFields")
+                  : t("features.create-wsol-ata.enterPrivateKey"),
+            );
+            setLoading(false);
+            return;
           }
 
           const requestBody: ApiRequestBody = {
             network: formData.network || "mainnet",
           };
-
-          if (usingKeystore) {
-            requestBody.keystore_json = formData.keystoreJson;
-            requestBody.password = formData.password;
-          } else {
-            requestBody.private_key = formData.private_key;
-          }
+          applyWalletAuth(requestBody, m, formData, "private_key");
 
           const response = await apiFetch("wsol/create-ata", {
             method: "POST",
@@ -625,33 +729,23 @@ export default function Home() {
         }
 
         case "wrap-sol": {
-          // Check if using keystore or private key
-          const usingKeystore = !!formData.keystoreJson;
-          if (usingKeystore) {
-            if (!formData.keystoreJson || !formData.password || !formData.amount) {
-              toast.error(t("features.wrap-sol.fillAllFields"));
-              setLoading(false);
-              return;
-            }
-          } else {
-            if (!formData.private_key || !formData.amount) {
-              toast.error(t("features.wrap-sol.fillAllFields"));
-              setLoading(false);
-              return;
-            }
+          const m = walletAuth("wrap-sol");
+          if (formData.amount === undefined || formData.amount === "") {
+            toast.error(t("features.wrap-sol.fillAllFields"));
+            setLoading(false);
+            return;
+          }
+          if (!validateWalletAuth(m, formData, "private_key")) {
+            toast.error(t("features.wrap-sol.fillAllFields"));
+            setLoading(false);
+            return;
           }
 
           const requestBody: ApiRequestBody = {
             amount: parseFloat(formData.amount as string),
             network: formData.network || "mainnet",
           };
-
-          if (usingKeystore) {
-            requestBody.keystore_json = formData.keystoreJson;
-            requestBody.password = formData.password;
-          } else {
-            requestBody.private_key = formData.private_key;
-          }
+          applyWalletAuth(requestBody, m, formData, "private_key");
 
           const response = await apiFetch("wsol/wrap", {
             method: "POST",
@@ -673,32 +767,23 @@ export default function Home() {
         }
 
         case "unwrap-sol": {
-          // Check if using keystore or private key
-          const usingKeystore = !!formData.keystoreJson;
-          if (usingKeystore) {
-            if (!formData.keystoreJson || !formData.password) {
-              toast.error(t("features.unwrap-sol.uploadKeystore"));
-              setLoading(false);
-              return;
-            }
-          } else {
-            if (!formData.private_key) {
-              toast.error(t("features.unwrap-sol.enterPrivateKey"));
-              setLoading(false);
-              return;
-            }
+          const m = walletAuth("unwrap-sol");
+          if (!validateWalletAuth(m, formData, "private_key")) {
+            toast.error(
+              m === "keystore"
+                ? t("features.unwrap-sol.uploadKeystore")
+                : m === "encrypted"
+                  ? t("features.decrypt.fillAllFields")
+                  : t("features.unwrap-sol.enterPrivateKey"),
+            );
+            setLoading(false);
+            return;
           }
 
           const requestBody: ApiRequestBody = {
             network: formData.network || "mainnet",
           };
-
-          if (usingKeystore) {
-            requestBody.keystore_json = formData.keystoreJson;
-            requestBody.password = formData.password;
-          } else {
-            requestBody.private_key = formData.private_key;
-          }
+          applyWalletAuth(requestBody, m, formData, "private_key");
 
           const response = await apiFetch("wsol/unwrap", {
             method: "POST",
@@ -720,32 +805,23 @@ export default function Home() {
         }
 
         case "create-nonce": {
-          // Check if using keystore or private key
-          const usingKeystore = !!formData.keystoreJson;
-          if (usingKeystore) {
-            if (!formData.keystoreJson || !formData.password) {
-              toast.error(t("features.create-nonce.uploadKeystore"));
-              setLoading(false);
-              return;
-            }
-          } else {
-            if (!formData.private_key) {
-              toast.error(t("features.create-nonce.enterPrivateKey"));
-              setLoading(false);
-              return;
-            }
+          const m = walletAuth("create-nonce");
+          if (!validateWalletAuth(m, formData, "private_key")) {
+            toast.error(
+              m === "keystore"
+                ? t("features.create-nonce.uploadKeystore")
+                : m === "encrypted"
+                  ? t("features.decrypt.fillAllFields")
+                  : t("features.create-nonce.enterPrivateKey"),
+            );
+            setLoading(false);
+            return;
           }
 
           const requestBody: ApiRequestBody = {
             network: formData.network || "mainnet",
           };
-
-          if (usingKeystore) {
-            requestBody.keystore_json = formData.keystoreJson;
-            requestBody.password = formData.password;
-          } else {
-            requestBody.private_key = formData.private_key;
-          }
+          applyWalletAuth(requestBody, m, formData, "private_key");
 
           const response = await apiFetch("nonce/create", {
             method: "POST",
@@ -800,22 +876,22 @@ export default function Home() {
         }
 
         case "create-tfa": {
-          const usingKeystore = !!formData.keystoreJson;
-
-          if (usingKeystore) {
-            if (!formData.keystoreJson || !formData.password || !formData.totp_secret || !formData.hardware_fingerprint ||
-                !formData.master_password || formData.question_index === undefined || !formData.security_answer) {
-              toast.error(t("features.create-tfa.fillAllFields"));
-              setLoading(false);
-              return;
-            }
-          } else {
-            if (!formData.private_key || !formData.totp_secret || !formData.hardware_fingerprint ||
-                !formData.master_password || formData.question_index === undefined || !formData.security_answer) {
-              toast.error(t("features.create-tfa.fillAllFields"));
-              setLoading(false);
-              return;
-            }
+          const m = walletAuth("create-tfa");
+          if (
+            !formData.totp_secret ||
+            !formData.hardware_fingerprint ||
+            !formData.master_password ||
+            formData.question_index === undefined ||
+            !formData.security_answer
+          ) {
+            toast.error(t("features.create-tfa.fillAllFields"));
+            setLoading(false);
+            return;
+          }
+          if (!validateWalletAuth(m, formData, "private_key")) {
+            toast.error(t("features.create-tfa.fillAllFields"));
+            setLoading(false);
+            return;
           }
 
           const requestBody: ApiRequestBody = {
@@ -825,13 +901,7 @@ export default function Home() {
             question_index: formData.question_index,
             security_answer: formData.security_answer,
           };
-
-          if (usingKeystore) {
-            requestBody.keystore_json = formData.keystoreJson;
-            requestBody.password = formData.password;
-          } else {
-            requestBody.private_key = formData.private_key;
-          }
+          applyWalletAuth(requestBody, m, formData, "private_key");
 
           const response = await apiFetch("2fa/create-tfa", {
             method: "POST",
@@ -888,31 +958,23 @@ export default function Home() {
         }
 
         case "close-wsol-ata": {
-          const usingKeystore = !!formData.keystoreJson;
-          if (usingKeystore) {
-            if (!formData.keystoreJson || !formData.password) {
-              toast.error(t("features.close-wsol-ata.uploadKeystore"));
-              setLoading(false);
-              return;
-            }
-          } else {
-            if (!formData.private_key) {
-              toast.error(t("features.close-wsol-ata.enterPrivateKey"));
-              setLoading(false);
-              return;
-            }
+          const m = walletAuth("close-wsol-ata");
+          if (!validateWalletAuth(m, formData, "private_key")) {
+            toast.error(
+              m === "keystore"
+                ? t("features.close-wsol-ata.uploadKeystore")
+                : m === "encrypted"
+                  ? t("features.decrypt.fillAllFields")
+                  : t("features.close-wsol-ata.enterPrivateKey"),
+            );
+            setLoading(false);
+            return;
           }
 
           const requestBody: ApiRequestBody = {
             network: formData.network || "mainnet",
           };
-
-          if (usingKeystore) {
-            requestBody.keystore_json = formData.keystoreJson;
-            requestBody.password = formData.password;
-          } else {
-            requestBody.private_key = formData.private_key;
-          }
+          applyWalletAuth(requestBody, m, formData, "private_key");
 
           const response = await apiFetch("wsol/close-ata", {
             method: "POST",
@@ -934,34 +996,25 @@ export default function Home() {
         }
 
         case "pumpfun-sell": {
-          const usingKeystore = !!formData.keystoreJson;
-          if (usingKeystore) {
-            if (!formData.keystoreJson || !formData.password || !formData.mint || !formData.amount) {
-              toast.error(t("features.pumpfun-sell.fillAllFields"));
-              setLoading(false);
-              return;
-            }
-          } else {
-            if (!formData.private_key || !formData.mint || !formData.amount) {
-              toast.error(t("features.pumpfun-sell.fillAllFields"));
-              setLoading(false);
-              return;
-            }
+          const m = walletAuth("pumpfun-sell");
+          if (!formData.mint || formData.amount === undefined || formData.amount === "") {
+            toast.error(t("features.pumpfun-sell.fillAllFields"));
+            setLoading(false);
+            return;
+          }
+          if (!validateWalletAuth(m, formData, "private_key")) {
+            toast.error(t("features.pumpfun-sell.fillAllFields"));
+            setLoading(false);
+            return;
           }
 
           const requestBody: ApiRequestBody = {
             mint: formData.mint,
             amount: parseFloat(formData.amount as string),
-            slippage: formData.slippage ? Math.floor(parseFloat(formData.slippage as string) * 100) : 100,
+            slippage: slippagePercentToBasisPoints(formData.slippage),
             network: formData.network || "mainnet",
           };
-
-          if (usingKeystore) {
-            requestBody.keystore_json = formData.keystoreJson;
-            requestBody.password = formData.password;
-          } else {
-            requestBody.private_key = formData.private_key;
-          }
+          applyWalletAuth(requestBody, m, formData, "private_key");
 
           const response = await apiFetch("pumpfun/sell", {
             method: "POST",
@@ -983,34 +1036,25 @@ export default function Home() {
         }
 
         case "pumpswap-sell": {
-          const usingKeystore = !!formData.keystoreJson;
-          if (usingKeystore) {
-            if (!formData.keystoreJson || !formData.password || !formData.mint || !formData.amount) {
-              toast.error(t("features.pumpswap-sell.fillAllFields"));
-              setLoading(false);
-              return;
-            }
-          } else {
-            if (!formData.private_key || !formData.mint || !formData.amount) {
-              toast.error(t("features.pumpswap-sell.fillAllFields"));
-              setLoading(false);
-              return;
-            }
+          const m = walletAuth("pumpswap-sell");
+          if (!formData.mint || formData.amount === undefined || formData.amount === "") {
+            toast.error(t("features.pumpswap-sell.fillAllFields"));
+            setLoading(false);
+            return;
+          }
+          if (!validateWalletAuth(m, formData, "private_key")) {
+            toast.error(t("features.pumpswap-sell.fillAllFields"));
+            setLoading(false);
+            return;
           }
 
           const requestBody: ApiRequestBody = {
             mint: formData.mint,
             amount: parseFloat(formData.amount as string),
-            slippage: formData.slippage ? Math.floor(parseFloat(formData.slippage as string) * 100) : 100,
+            slippage: slippagePercentToBasisPoints(formData.slippage),
             network: formData.network || "mainnet",
           };
-
-          if (usingKeystore) {
-            requestBody.keystore_json = formData.keystoreJson;
-            requestBody.password = formData.password;
-          } else {
-            requestBody.private_key = formData.private_key;
-          }
+          applyWalletAuth(requestBody, m, formData, "private_key");
 
           const response = await apiFetch("pumpswap/sell", {
             method: "POST",
@@ -1033,31 +1077,23 @@ export default function Home() {
 
         case "pumpfun-cashback":
         case "pumpswap-cashback": {
-          const usingKeystore = !!formData.keystoreJson;
-          if (usingKeystore) {
-            if (!formData.keystoreJson || !formData.password) {
-              toast.error(t("features.pumpfun-cashback.uploadKeystore"));
-              setLoading(false);
-              return;
-            }
-          } else {
-            if (!formData.private_key) {
-              toast.error(t("features.pumpfun-cashback.enterPrivateKey"));
-              setLoading(false);
-              return;
-            }
+          const m = walletAuth(formId);
+          if (!validateWalletAuth(m, formData, "private_key")) {
+            toast.error(
+              m === "keystore"
+                ? t("features.pumpfun-cashback.uploadKeystore")
+                : m === "encrypted"
+                  ? t("features.decrypt.fillAllFields")
+                  : t("features.pumpfun-cashback.enterPrivateKey"),
+            );
+            setLoading(false);
+            return;
           }
 
           const requestBody: ApiRequestBody = {
             network: formData.network || "mainnet",
           };
-
-          if (usingKeystore) {
-            requestBody.keystore_json = formData.keystoreJson;
-            requestBody.password = formData.password;
-          } else {
-            requestBody.private_key = formData.private_key;
-          }
+          applyWalletAuth(requestBody, m, formData, "private_key");
 
           const apiUrlPath = formId === "pumpfun-cashback" ? "/pumpfun/cashback" : "/pumpswap/cashback";
           const response = await apiFetch(apiUrlPath.replace(/^\//, ""), {
@@ -1264,7 +1300,7 @@ export default function Home() {
                     <textarea
                       readOnly
                       className="flex-1 px-3 py-2 bg-black/30 rounded text-xs h-24 resize-none"
-                      value={formData.keystoreJson}
+                      value={formData.keystoreJson ?? ""}
                     />
                     <button
                       onClick={() => copyToClipboard(formData.keystoreJson as string, "ks-json")}
@@ -1352,22 +1388,25 @@ export default function Home() {
           </div>
         );
 
-      case "decrypt":
+      case "decrypt": {
+        const decryptAuth = walletAuth("decrypt");
         return (
           <div className="space-y-4">
             <div>
               <label className="block text-sm font-medium mb-2">{t("formUi.authMethod")}</label>
               <div className="grid grid-cols-3 gap-2">
                 <button
+                  type="button"
                   onClick={() => {
                     setAuthMethod({ ...authMethod, "decrypt": "keystore" });
                     const newFormData = { ...formData };
                     delete newFormData.secretKey;
                     delete newFormData.encryptedKey;
+                    delete newFormData.encrypted_key;
                     setFormData(newFormData);
                   }}
                   className={`py-2 px-3 rounded-lg font-medium transition-colors text-sm ${
-                    authMethod["decrypt"] === "keystore"
+                    decryptAuth === "keystore"
                       ? "bg-gradient-to-r from-purple-500 to-pink-500 text-white"
                       : "bg-white/5 text-gray-400 hover:bg-white/10"
                   }`}
@@ -1375,6 +1414,7 @@ export default function Home() {
                   {t("formUi.tabKeystore")}
                 </button>
                 <button
+                  type="button"
                   onClick={() => {
                     setAuthMethod({ ...authMethod, "decrypt": "encrypted" });
                     const newFormData = { ...formData };
@@ -1383,7 +1423,7 @@ export default function Home() {
                     setFormData(newFormData);
                   }}
                   className={`py-2 px-3 rounded-lg font-medium transition-colors text-sm ${
-                    authMethod["decrypt"] === "encrypted"
+                    decryptAuth === "encrypted"
                       ? "bg-gradient-to-r from-purple-500 to-pink-500 text-white"
                       : "bg-white/5 text-gray-400 hover:bg-white/10"
                   }`}
@@ -1391,16 +1431,18 @@ export default function Home() {
                   {t("formUi.tabEncrypted")}
                 </button>
                 <button
+                  type="button"
                   onClick={() => {
                     setAuthMethod({ ...authMethod, "decrypt": "private" });
                     const newFormData = { ...formData };
                     delete newFormData.keystoreJson;
                     delete newFormData.encryptedKey;
+                    delete newFormData.encrypted_key;
                     delete newFormData.password;
                     setFormData(newFormData);
                   }}
                   className={`py-2 px-3 rounded-lg font-medium transition-colors text-sm ${
-                    authMethod["decrypt"] === "private"
+                    decryptAuth === "private"
                       ? "bg-gradient-to-r from-purple-500 to-pink-500 text-white"
                       : "bg-white/5 text-gray-400 hover:bg-white/10"
                   }`}
@@ -1410,7 +1452,7 @@ export default function Home() {
               </div>
             </div>
 
-            {authMethod["decrypt"] === "keystore" && (
+            {decryptAuth === "keystore" && (
               <>
                 <div>
                   <label className="block text-sm font-medium mb-2">{t("formUi.uploadKeystore")}</label>
@@ -1437,7 +1479,7 @@ export default function Home() {
               </>
             )}
 
-            {authMethod["decrypt"] === "encrypted" && (
+            {decryptAuth === "encrypted" && (
               <>
                 <div>
                   <label className="block text-sm font-medium mb-2">{t("formUi.encryptedKey")}</label>
@@ -1461,7 +1503,7 @@ export default function Home() {
               </>
             )}
 
-            {authMethod["decrypt"] === "private" && (
+            {decryptAuth === "private" && (
               <div>
                 <label className="block text-sm font-medium mb-2">{t("formUi.privateKey")}</label>
                 <input
@@ -1502,23 +1544,27 @@ export default function Home() {
             )}
           </div>
         );
+      }
 
-      case "unlock":
+      case "unlock": {
+        const unlockAuth = walletAuth("unlock");
         return (
           <div className="space-y-4">
             <div>
               <label className="block text-sm font-medium mb-2">{t("formUi.authMethod")}</label>
               <div className="grid grid-cols-3 gap-2">
                 <button
+                  type="button"
                   onClick={() => {
                     setAuthMethod({ ...authMethod, "unlock": "keystore" });
                     const newFormData = { ...formData };
                     delete newFormData.secretKey;
                     delete newFormData.encryptedKey;
+                    delete newFormData.encrypted_key;
                     setFormData(newFormData);
                   }}
                   className={`py-2 px-3 rounded-lg font-medium transition-colors text-sm ${
-                    authMethod["unlock"] === "keystore"
+                    unlockAuth === "keystore"
                       ? "bg-gradient-to-r from-purple-500 to-pink-500 text-white"
                       : "bg-white/5 text-gray-400 hover:bg-white/10"
                   }`}
@@ -1526,6 +1572,7 @@ export default function Home() {
                   {t("formUi.tabKeystore")}
                 </button>
                 <button
+                  type="button"
                   onClick={() => {
                     setAuthMethod({ ...authMethod, "unlock": "encrypted" });
                     const newFormData = { ...formData };
@@ -1534,7 +1581,7 @@ export default function Home() {
                     setFormData(newFormData);
                   }}
                   className={`py-2 px-3 rounded-lg font-medium transition-colors text-sm ${
-                    authMethod["unlock"] === "encrypted"
+                    unlockAuth === "encrypted"
                       ? "bg-gradient-to-r from-purple-500 to-pink-500 text-white"
                       : "bg-white/5 text-gray-400 hover:bg-white/10"
                   }`}
@@ -1542,16 +1589,18 @@ export default function Home() {
                   {t("formUi.tabEncrypted")}
                 </button>
                 <button
+                  type="button"
                   onClick={() => {
                     setAuthMethod({ ...authMethod, "unlock": "private" });
                     const newFormData = { ...formData };
                     delete newFormData.keystoreJson;
                     delete newFormData.encryptedKey;
+                    delete newFormData.encrypted_key;
                     delete newFormData.password;
                     setFormData(newFormData);
                   }}
                   className={`py-2 px-3 rounded-lg font-medium transition-colors text-sm ${
-                    authMethod["unlock"] === "private"
+                    unlockAuth === "private"
                       ? "bg-gradient-to-r from-purple-500 to-pink-500 text-white"
                       : "bg-white/5 text-gray-400 hover:bg-white/10"
                   }`}
@@ -1561,7 +1610,7 @@ export default function Home() {
               </div>
             </div>
 
-            {authMethod["unlock"] === "keystore" && (
+            {unlockAuth === "keystore" && (
               <>
                 <div>
                   <label className="block text-sm font-medium mb-2">{t("formUi.uploadKeystore")}</label>
@@ -1588,7 +1637,7 @@ export default function Home() {
               </>
             )}
 
-            {authMethod["unlock"] === "encrypted" && (
+            {unlockAuth === "encrypted" && (
               <>
                 <div>
                   <label className="block text-sm font-medium mb-2">{t("formUi.encryptedKey")}</label>
@@ -1612,7 +1661,7 @@ export default function Home() {
               </>
             )}
 
-            {authMethod["unlock"] === "private" && (
+            {unlockAuth === "private" && (
               <div>
                 <label className="block text-sm font-medium mb-2">{t("formUi.privateKey")}</label>
                 <input
@@ -1659,6 +1708,7 @@ export default function Home() {
             )}
           </div>
         );
+      }
 
       case "check-balance":
         return (
@@ -1702,22 +1752,25 @@ export default function Home() {
           </div>
         );
 
-      case "get-pubkey":
+      case "get-pubkey": {
+        const getPubkeyAuth = walletAuth("get-pubkey");
         return (
           <div className="space-y-4">
             <div>
               <label className="block text-sm font-medium mb-2">{t("formUi.authMethod")}</label>
               <div className="grid grid-cols-3 gap-2">
                 <button
+                  type="button"
                   onClick={() => {
                     setAuthMethod({ ...authMethod, "get-pubkey": "keystore" });
                     const newFormData = { ...formData };
                     delete newFormData.secretKey;
                     delete newFormData.encryptedKey;
+                    delete newFormData.encrypted_key;
                     setFormData(newFormData);
                   }}
                   className={`py-2 px-3 rounded-lg font-medium transition-colors text-sm ${
-                    authMethod["get-pubkey"] === "keystore"
+                    getPubkeyAuth === "keystore"
                       ? "bg-gradient-to-r from-purple-500 to-pink-500 text-white"
                       : "bg-white/5 text-gray-400 hover:bg-white/10"
                   }`}
@@ -1725,6 +1778,7 @@ export default function Home() {
                   {t("formUi.tabKeystore")}
                 </button>
                 <button
+                  type="button"
                   onClick={() => {
                     setAuthMethod({ ...authMethod, "get-pubkey": "encrypted" });
                     const newFormData = { ...formData };
@@ -1733,7 +1787,7 @@ export default function Home() {
                     setFormData(newFormData);
                   }}
                   className={`py-2 px-3 rounded-lg font-medium transition-colors text-sm ${
-                    authMethod["get-pubkey"] === "encrypted"
+                    getPubkeyAuth === "encrypted"
                       ? "bg-gradient-to-r from-purple-500 to-pink-500 text-white"
                       : "bg-white/5 text-gray-400 hover:bg-white/10"
                   }`}
@@ -1741,16 +1795,18 @@ export default function Home() {
                   {t("formUi.tabEncrypted")}
                 </button>
                 <button
+                  type="button"
                   onClick={() => {
                     setAuthMethod({ ...authMethod, "get-pubkey": "private" });
                     const newFormData = { ...formData };
                     delete newFormData.keystoreJson;
                     delete newFormData.encryptedKey;
+                    delete newFormData.encrypted_key;
                     delete newFormData.password;
                     setFormData(newFormData);
                   }}
                   className={`py-2 px-3 rounded-lg font-medium transition-colors text-sm ${
-                    authMethod["get-pubkey"] === "private"
+                    getPubkeyAuth === "private"
                       ? "bg-gradient-to-r from-purple-500 to-pink-500 text-white"
                       : "bg-white/5 text-gray-400 hover:bg-white/10"
                   }`}
@@ -1760,7 +1816,7 @@ export default function Home() {
               </div>
             </div>
 
-            {authMethod["get-pubkey"] === "keystore" && (
+            {getPubkeyAuth === "keystore" && (
               <>
                 <div>
                   <label className="block text-sm font-medium mb-2">{t("formUi.uploadKeystore")}</label>
@@ -1787,13 +1843,13 @@ export default function Home() {
               </>
             )}
 
-            {authMethod["get-pubkey"] === "encrypted" && (
+            {getPubkeyAuth === "encrypted" && (
               <>
                 <div>
                   <label className="block text-sm font-medium mb-2">{t("formUi.encryptedKey")}</label>
                   <textarea
-                    value={formData.encryptedKey || ""}
-                    onChange={(e) => handleFormChange("encryptedKey", e.target.value)}
+                    value={formData.encrypted_key || ""}
+                    onChange={(e) => handleFormChange("encrypted_key", e.target.value)}
                     className="w-full px-4 py-2 bg-white/5 border border-white/10 rounded-lg focus:outline-none focus:ring-2 focus:ring-white/20 text-white min-h-[100px]"
                     placeholder={t("formUi.placeholderEncryptedKey")}
                   />
@@ -1811,7 +1867,7 @@ export default function Home() {
               </>
             )}
 
-            {authMethod["get-pubkey"] === "private" && (
+            {getPubkeyAuth === "private" && (
               <div>
                 <label className="block text-sm font-medium mb-2">{t("formUi.privateKey")}</label>
                 <input
@@ -1852,11 +1908,11 @@ export default function Home() {
             )}
           </div>
         );
+      }
 
       case "transfer-sol":
         return (
           <div className="space-y-4">
-            {/* Authentication Method Selector */}
             <div>
               <label className="block text-sm font-medium mb-2">{t("formUi.authMethod")}</label>
               <div className="grid grid-cols-3 gap-2">
@@ -1869,7 +1925,7 @@ export default function Home() {
                     setFormData(newFormData);
                   }}
                   className={`py-2 px-3 rounded-lg font-medium transition-colors text-sm ${
-                    authMethod["transfer-sol"] === "keystore"
+                    walletAuth("transfer-sol") === "keystore"
                       ? "bg-gradient-to-r from-purple-500 to-pink-500 text-white"
                       : "bg-white/5 text-gray-400 hover:bg-white/10"
                   }`}
@@ -1885,7 +1941,7 @@ export default function Home() {
                     setFormData(newFormData);
                   }}
                   className={`py-2 px-3 rounded-lg font-medium transition-colors text-sm ${
-                    authMethod["transfer-sol"] === "encrypted"
+                    walletAuth("transfer-sol") === "encrypted"
                       ? "bg-gradient-to-r from-purple-500 to-pink-500 text-white"
                       : "bg-white/5 text-gray-400 hover:bg-white/10"
                   }`}
@@ -1902,7 +1958,7 @@ export default function Home() {
                     setFormData(newFormData);
                   }}
                   className={`py-2 px-3 rounded-lg font-medium transition-colors text-sm ${
-                    authMethod["transfer-sol"] === "private"
+                    walletAuth("transfer-sol") === "private"
                       ? "bg-gradient-to-r from-purple-500 to-pink-500 text-white"
                       : "bg-white/5 text-gray-400 hover:bg-white/10"
                   }`}
@@ -1913,7 +1969,7 @@ export default function Home() {
             </div>
 
             {/* Keystore Input */}
-            {authMethod["transfer-sol"] === "keystore" && (
+            {walletAuth("transfer-sol") === "keystore" && (
               <>
                 <div>
                   <label className="block text-sm font-medium mb-2">{t("formUi.uploadKeystore")}</label>
@@ -1940,7 +1996,7 @@ export default function Home() {
               </>
             )}
 
-            {authMethod["transfer-sol"] === "encrypted" && (
+            {walletAuth("transfer-sol") === "encrypted" && (
               <>
                 <div>
                   <label className="block text-sm font-medium mb-2">{t("formUi.encryptedKey")}</label>
@@ -1964,7 +2020,7 @@ export default function Home() {
               </>
             )}
 
-            {authMethod["transfer-sol"] === "private" && (
+            {walletAuth("transfer-sol") === "private" && (
               <div>
                 <label className="block text-sm font-medium mb-2">{t("formUi.senderPrivateKey")}</label>
                 <input
@@ -2053,7 +2109,7 @@ export default function Home() {
                     setFormData(newFormData);
                   }}
                   className={`py-2 px-3 rounded-lg font-medium transition-colors text-sm ${
-                    authMethod["transfer-token"] === "keystore"
+                    walletAuth("transfer-token") === "keystore"
                       ? "bg-gradient-to-r from-purple-500 to-pink-500 text-white"
                       : "bg-white/5 text-gray-400 hover:bg-white/10"
                   }`}
@@ -2069,7 +2125,7 @@ export default function Home() {
                     setFormData(newFormData);
                   }}
                   className={`py-2 px-3 rounded-lg font-medium transition-colors text-sm ${
-                    authMethod["transfer-token"] === "encrypted"
+                    walletAuth("transfer-token") === "encrypted"
                       ? "bg-gradient-to-r from-purple-500 to-pink-500 text-white"
                       : "bg-white/5 text-gray-400 hover:bg-white/10"
                   }`}
@@ -2086,7 +2142,7 @@ export default function Home() {
                     setFormData(newFormData);
                   }}
                   className={`py-2 px-3 rounded-lg font-medium transition-colors text-sm ${
-                    authMethod["transfer-token"] === "private"
+                    walletAuth("transfer-token") === "private"
                       ? "bg-gradient-to-r from-purple-500 to-pink-500 text-white"
                       : "bg-white/5 text-gray-400 hover:bg-white/10"
                   }`}
@@ -2096,7 +2152,7 @@ export default function Home() {
               </div>
             </div>
 
-            {authMethod["transfer-token"] === "keystore" && (
+            {walletAuth("transfer-token") === "keystore" && (
               <>
                 <div>
                   <label className="block text-sm font-medium mb-2">{t("formUi.uploadKeystore")}</label>
@@ -2123,7 +2179,7 @@ export default function Home() {
               </>
             )}
 
-            {authMethod["transfer-token"] === "encrypted" && (
+            {walletAuth("transfer-token") === "encrypted" && (
               <>
                 <div>
                   <label className="block text-sm font-medium mb-2">{t("formUi.encryptedKey")}</label>
@@ -2147,7 +2203,7 @@ export default function Home() {
               </>
             )}
 
-            {authMethod["transfer-token"] === "private" && (
+            {walletAuth("transfer-token") === "private" && (
               <div>
                 <label className="block text-sm font-medium mb-2">{t("formUi.senderPrivateKey")}</label>
                 <input
@@ -2256,7 +2312,7 @@ export default function Home() {
                     setFormData(newFormData);
                   }}
                   className={`py-2 px-3 rounded-lg font-medium transition-colors text-sm ${
-                    authMethod["create-wsol-ata"] === "keystore"
+                    walletAuth("create-wsol-ata") === "keystore"
                       ? "bg-gradient-to-r from-purple-500 to-pink-500 text-white"
                       : "bg-white/5 text-gray-400 hover:bg-white/10"
                   }`}
@@ -2272,7 +2328,7 @@ export default function Home() {
                     setFormData(newFormData);
                   }}
                   className={`py-2 px-3 rounded-lg font-medium transition-colors text-sm ${
-                    authMethod["create-wsol-ata"] === "encrypted"
+                    walletAuth("create-wsol-ata") === "encrypted"
                       ? "bg-gradient-to-r from-purple-500 to-pink-500 text-white"
                       : "bg-white/5 text-gray-400 hover:bg-white/10"
                   }`}
@@ -2289,7 +2345,7 @@ export default function Home() {
                     setFormData(newFormData);
                   }}
                   className={`py-2 px-3 rounded-lg font-medium transition-colors text-sm ${
-                    authMethod["create-wsol-ata"] === "private"
+                    walletAuth("create-wsol-ata") === "private"
                       ? "bg-gradient-to-r from-purple-500 to-pink-500 text-white"
                       : "bg-white/5 text-gray-400 hover:bg-white/10"
                   }`}
@@ -2299,7 +2355,7 @@ export default function Home() {
               </div>
             </div>
 
-            {authMethod["create-wsol-ata"] === "keystore" && (
+            {walletAuth("create-wsol-ata") === "keystore" && (
               <>
                 <div>
                   <label className="block text-sm font-medium mb-2">{t("formUi.uploadKeystore")}</label>
@@ -2326,7 +2382,7 @@ export default function Home() {
               </>
             )}
 
-            {authMethod["create-wsol-ata"] === "encrypted" && (
+            {walletAuth("create-wsol-ata") === "encrypted" && (
               <>
                 <div>
                   <label className="block text-sm font-medium mb-2">{t("formUi.encryptedKey")}</label>
@@ -2350,7 +2406,7 @@ export default function Home() {
               </>
             )}
 
-            {authMethod["create-wsol-ata"] === "private" && (
+            {walletAuth("create-wsol-ata") === "private" && (
               <div>
                 <label className="block text-sm font-medium mb-2">{t("formUi.privateKey")}</label>
                 <input
@@ -2418,7 +2474,7 @@ export default function Home() {
                     setFormData(newFormData);
                   }}
                   className={`py-2 px-3 rounded-lg font-medium transition-colors text-sm ${
-                    authMethod["wrap-sol"] === "keystore"
+                    walletAuth("wrap-sol") === "keystore"
                       ? "bg-gradient-to-r from-purple-500 to-pink-500 text-white"
                       : "bg-white/5 text-gray-400 hover:bg-white/10"
                   }`}
@@ -2434,7 +2490,7 @@ export default function Home() {
                     setFormData(newFormData);
                   }}
                   className={`py-2 px-3 rounded-lg font-medium transition-colors text-sm ${
-                    authMethod["wrap-sol"] === "encrypted"
+                    walletAuth("wrap-sol") === "encrypted"
                       ? "bg-gradient-to-r from-purple-500 to-pink-500 text-white"
                       : "bg-white/5 text-gray-400 hover:bg-white/10"
                   }`}
@@ -2451,7 +2507,7 @@ export default function Home() {
                     setFormData(newFormData);
                   }}
                   className={`py-2 px-3 rounded-lg font-medium transition-colors text-sm ${
-                    authMethod["wrap-sol"] === "private"
+                    walletAuth("wrap-sol") === "private"
                       ? "bg-gradient-to-r from-purple-500 to-pink-500 text-white"
                       : "bg-white/5 text-gray-400 hover:bg-white/10"
                   }`}
@@ -2461,7 +2517,7 @@ export default function Home() {
               </div>
             </div>
 
-            {authMethod["wrap-sol"] === "keystore" && (
+            {walletAuth("wrap-sol") === "keystore" && (
               <>
                 <div>
                   <label className="block text-sm font-medium mb-2">{t("formUi.uploadKeystore")}</label>
@@ -2488,7 +2544,7 @@ export default function Home() {
               </>
             )}
 
-            {authMethod["wrap-sol"] === "encrypted" && (
+            {walletAuth("wrap-sol") === "encrypted" && (
               <>
                 <div>
                   <label className="block text-sm font-medium mb-2">{t("formUi.encryptedKey")}</label>
@@ -2512,7 +2568,7 @@ export default function Home() {
               </>
             )}
 
-            {authMethod["wrap-sol"] === "private" && (
+            {walletAuth("wrap-sol") === "private" && (
               <div>
                 <label className="block text-sm font-medium mb-2">{t("formUi.privateKey")}</label>
                 <input
@@ -2591,7 +2647,7 @@ export default function Home() {
                     setFormData(newFormData);
                   }}
                   className={`py-2 px-3 rounded-lg font-medium transition-colors text-sm ${
-                    authMethod["unwrap-sol"] === "keystore"
+                    walletAuth("unwrap-sol") === "keystore"
                       ? "bg-gradient-to-r from-purple-500 to-pink-500 text-white"
                       : "bg-white/5 text-gray-400 hover:bg-white/10"
                   }`}
@@ -2607,7 +2663,7 @@ export default function Home() {
                     setFormData(newFormData);
                   }}
                   className={`py-2 px-3 rounded-lg font-medium transition-colors text-sm ${
-                    authMethod["unwrap-sol"] === "encrypted"
+                    walletAuth("unwrap-sol") === "encrypted"
                       ? "bg-gradient-to-r from-purple-500 to-pink-500 text-white"
                       : "bg-white/5 text-gray-400 hover:bg-white/10"
                   }`}
@@ -2624,7 +2680,7 @@ export default function Home() {
                     setFormData(newFormData);
                   }}
                   className={`py-2 px-3 rounded-lg font-medium transition-colors text-sm ${
-                    authMethod["unwrap-sol"] === "private"
+                    walletAuth("unwrap-sol") === "private"
                       ? "bg-gradient-to-r from-purple-500 to-pink-500 text-white"
                       : "bg-white/5 text-gray-400 hover:bg-white/10"
                   }`}
@@ -2634,7 +2690,7 @@ export default function Home() {
               </div>
             </div>
 
-            {authMethod["unwrap-sol"] === "keystore" && (
+            {walletAuth("unwrap-sol") === "keystore" && (
               <>
                 <div>
                   <label className="block text-sm font-medium mb-2">{t("formUi.uploadKeystore")}</label>
@@ -2661,7 +2717,7 @@ export default function Home() {
               </>
             )}
 
-            {authMethod["unwrap-sol"] === "encrypted" && (
+            {walletAuth("unwrap-sol") === "encrypted" && (
               <>
                 <div>
                   <label className="block text-sm font-medium mb-2">{t("formUi.encryptedKey")}</label>
@@ -2685,7 +2741,7 @@ export default function Home() {
               </>
             )}
 
-            {authMethod["unwrap-sol"] === "private" && (
+            {walletAuth("unwrap-sol") === "private" && (
               <div>
                 <label className="block text-sm font-medium mb-2">{t("formUi.privateKey")}</label>
                 <input
@@ -2738,7 +2794,8 @@ export default function Home() {
           </div>
         );
 
-      case "create-nonce":
+      case "create-nonce": {
+        const nonceAuth = walletAuth("create-nonce");
         return (
           <div className="space-y-4">
             <div>
@@ -2753,7 +2810,7 @@ export default function Home() {
                     setFormData(newFormData);
                   }}
                   className={`py-2 px-3 rounded-lg font-medium transition-colors text-sm ${
-                    authMethod["create-nonce"] === "keystore"
+                    nonceAuth === "keystore"
                       ? "bg-gradient-to-r from-purple-500 to-pink-500 text-white"
                       : "bg-white/5 text-gray-400 hover:bg-white/10"
                   }`}
@@ -2769,7 +2826,7 @@ export default function Home() {
                     setFormData(newFormData);
                   }}
                   className={`py-2 px-3 rounded-lg font-medium transition-colors text-sm ${
-                    authMethod["create-nonce"] === "encrypted"
+                    nonceAuth === "encrypted"
                       ? "bg-gradient-to-r from-purple-500 to-pink-500 text-white"
                       : "bg-white/5 text-gray-400 hover:bg-white/10"
                   }`}
@@ -2786,7 +2843,7 @@ export default function Home() {
                     setFormData(newFormData);
                   }}
                   className={`py-2 px-3 rounded-lg font-medium transition-colors text-sm ${
-                    authMethod["create-nonce"] === "private"
+                    nonceAuth === "private"
                       ? "bg-gradient-to-r from-purple-500 to-pink-500 text-white"
                       : "bg-white/5 text-gray-400 hover:bg-white/10"
                   }`}
@@ -2796,13 +2853,14 @@ export default function Home() {
               </div>
             </div>
 
-            {authMethod["create-nonce"] === "keystore" && (
+            {nonceAuth === "keystore" && (
               <>
                 <div>
                   <label className="block text-sm font-medium mb-2">{t("formUi.uploadKeystore")}</label>
                   <input
+                    key={`create-nonce-${nonceAuth}`}
                     type="file"
-                    accept=".json"
+                    accept=".json,application/json"
                     onChange={handleFileUpload}
                     className="w-full px-4 py-2 bg-white/5 border border-white/10 rounded-lg focus:outline-none focus:ring-2 focus:ring-white/20 text-white file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:bg-white/10 file:text-white hover:file:bg-white/20"
                   />
@@ -2823,7 +2881,7 @@ export default function Home() {
               </>
             )}
 
-            {authMethod["create-nonce"] === "encrypted" && (
+            {nonceAuth === "encrypted" && (
               <>
                 <div>
                   <label className="block text-sm font-medium mb-2">{t("formUi.encryptedKey")}</label>
@@ -2847,7 +2905,7 @@ export default function Home() {
               </>
             )}
 
-            {authMethod["create-nonce"] === "private" && (
+            {nonceAuth === "private" && (
               <div>
                 <label className="block text-sm font-medium mb-2">{t("formUi.privateKey")}</label>
                 <input
@@ -2913,6 +2971,7 @@ export default function Home() {
             )}
           </div>
         );
+      }
 
       case "setup-2fa":
         return (
@@ -2992,37 +3051,59 @@ export default function Home() {
           </div>
         );
 
-      case "create-tfa":
+      case "create-tfa": {
+        const tfaAuth = authMethod["create-tfa"] ?? "keystore";
         return (
           <div className="space-y-4">
             <div>
               <label className="block text-sm font-medium mb-2">{t("formUi.authMethod")}</label>
-              <div className="flex gap-2">
+              <div className="grid grid-cols-3 gap-2">
                 <button
+                  type="button"
                   onClick={() => {
-                    setAuthMethod({ ...authMethod, [selectedForm || ""]: "keystore" });
+                    setAuthMethod({ ...authMethod, "create-tfa": "keystore" });
                     const newFormData = { ...formData };
                     delete newFormData.private_key;
+                    delete newFormData.encrypted_key;
                     setFormData(newFormData);
                   }}
-                  className={`flex-1 py-2 px-4 rounded-lg font-medium transition-colors ${
-                    authMethod[selectedForm || ""] === "keystore"
+                  className={`py-2 px-3 rounded-lg font-medium transition-colors text-sm ${
+                    tfaAuth === "keystore"
                       ? "bg-gradient-to-r from-purple-500 to-pink-500 text-white"
                       : "bg-white/5 text-gray-400 hover:bg-white/10"
                   }`}
                 >
-                  {t("formUi.keystoreRecommended")}
+                  {t("formUi.tabKeystore")}
                 </button>
                 <button
+                  type="button"
                   onClick={() => {
-                    setAuthMethod({ ...authMethod, [selectedForm || ""]: "private" });
+                    setAuthMethod({ ...authMethod, "create-tfa": "encrypted" });
+                    const newFormData = { ...formData };
+                    delete newFormData.private_key;
+                    delete newFormData.keystoreJson;
+                    setFormData(newFormData);
+                  }}
+                  className={`py-2 px-3 rounded-lg font-medium transition-colors text-sm ${
+                    tfaAuth === "encrypted"
+                      ? "bg-gradient-to-r from-purple-500 to-pink-500 text-white"
+                      : "bg-white/5 text-gray-400 hover:bg-white/10"
+                  }`}
+                >
+                  {t("formUi.tabEncrypted")}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setAuthMethod({ ...authMethod, "create-tfa": "private" });
                     const newFormData = { ...formData };
                     delete newFormData.keystoreJson;
+                    delete newFormData.encrypted_key;
                     delete newFormData.password;
                     setFormData(newFormData);
                   }}
-                  className={`flex-1 py-2 px-4 rounded-lg font-medium transition-colors ${
-                    authMethod[selectedForm || ""] === "private"
+                  className={`py-2 px-3 rounded-lg font-medium transition-colors text-sm ${
+                    tfaAuth === "private"
                       ? "bg-gradient-to-r from-purple-500 to-pink-500 text-white"
                       : "bg-white/5 text-gray-400 hover:bg-white/10"
                   }`}
@@ -3032,13 +3113,13 @@ export default function Home() {
               </div>
             </div>
 
-            {authMethod[selectedForm || ""] === "keystore" ? (
+            {tfaAuth === "keystore" && (
               <>
                 <div>
                   <label className="block text-sm font-medium mb-2">{t("features.create-tfa.uploadFile")}</label>
                   <input
                     type="file"
-                    accept=".json"
+                    accept=".json,application/json"
                     onChange={handleFileUpload}
                     className="w-full px-4 py-2 bg-white/5 border border-white/10 rounded-lg focus:outline-none focus:ring-2 focus:ring-white/20 text-white file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:bg-white/10 file:text-white hover:file:bg-white/20"
                   />
@@ -3057,7 +3138,33 @@ export default function Home() {
                   />
                 </div>
               </>
-            ) : (
+            )}
+
+            {tfaAuth === "encrypted" && (
+              <>
+                <div>
+                  <label className="block text-sm font-medium mb-2">{t("formUi.encryptedKey")}</label>
+                  <textarea
+                    value={formData.encrypted_key || ""}
+                    onChange={(e) => handleFormChange("encrypted_key", e.target.value)}
+                    className="w-full px-4 py-2 bg-white/5 border border-white/10 rounded-lg focus:outline-none focus:ring-2 focus:ring-white/20 text-white min-h-[120px]"
+                    placeholder={t("formUi.placeholderEncryptedKey")}
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium mb-2">{t("formUi.password")}</label>
+                  <input
+                    type="password"
+                    value={formData.password || ""}
+                    onChange={(e) => handleFormChange("password", e.target.value)}
+                    className="w-full px-4 py-2 bg-white/5 border border-white/10 rounded-lg focus:outline-none focus:ring-2 focus:ring-white/20 text-white"
+                    placeholder={t("formUi.placeholderDecryptPassword")}
+                  />
+                </div>
+              </>
+            )}
+
+            {tfaAuth === "private" && (
               <div>
                 <label className="block text-sm font-medium mb-2">{t("features.create-tfa.privateKeyLabel")}</label>
                 <input
@@ -3103,8 +3210,16 @@ export default function Home() {
               <label className="block text-sm font-medium mb-2">{t("features.create-tfa.questionIndex")}</label>
               <input
                 type="number"
-                value={formData.question_index || 0}
-                onChange={(e) => handleFormChange("question_index", parseInt(e.target.value))}
+                value={formData.question_index === undefined ? "" : formData.question_index}
+                onChange={(e) => {
+                  const raw = e.target.value;
+                  if (raw === "") {
+                    handleFormChange("question_index", undefined);
+                    return;
+                  }
+                  const n = parseInt(raw, 10);
+                  handleFormChange("question_index", Number.isNaN(n) ? undefined : n);
+                }}
                 className="w-full px-4 py-2 bg-white/5 border border-white/10 rounded-lg focus:outline-none focus:ring-2 focus:ring-white/20 text-white"
                 placeholder={t("features.create-tfa.questionIndexPlaceholder")}
                 min="0"
@@ -3163,6 +3278,7 @@ export default function Home() {
             )}
           </div>
         );
+      }
 
       case "unlock-tfa":
         return (
@@ -3275,7 +3391,7 @@ export default function Home() {
                     setFormData(newFormData);
                   }}
                   className={`py-2 px-3 rounded-lg font-medium transition-colors text-sm ${
-                    authMethod["close-wsol-ata"] === "keystore"
+                    walletAuth("close-wsol-ata") === "keystore"
                       ? "bg-gradient-to-r from-purple-500 to-pink-500 text-white"
                       : "bg-white/5 text-gray-400 hover:bg-white/10"
                   }`}
@@ -3291,7 +3407,7 @@ export default function Home() {
                     setFormData(newFormData);
                   }}
                   className={`py-2 px-3 rounded-lg font-medium transition-colors text-sm ${
-                    authMethod["close-wsol-ata"] === "encrypted"
+                    walletAuth("close-wsol-ata") === "encrypted"
                       ? "bg-gradient-to-r from-purple-500 to-pink-500 text-white"
                       : "bg-white/5 text-gray-400 hover:bg-white/10"
                   }`}
@@ -3308,7 +3424,7 @@ export default function Home() {
                     setFormData(newFormData);
                   }}
                   className={`py-2 px-3 rounded-lg font-medium transition-colors text-sm ${
-                    authMethod["close-wsol-ata"] === "private"
+                    walletAuth("close-wsol-ata") === "private"
                       ? "bg-gradient-to-r from-purple-500 to-pink-500 text-white"
                       : "bg-white/5 text-gray-400 hover:bg-white/10"
                   }`}
@@ -3318,7 +3434,7 @@ export default function Home() {
               </div>
             </div>
 
-            {authMethod["close-wsol-ata"] === "keystore" && (
+            {walletAuth("close-wsol-ata") === "keystore" && (
               <>
                 <div>
                   <label className="block text-sm font-medium mb-2">{t("formUi.uploadKeystore")}</label>
@@ -3345,7 +3461,7 @@ export default function Home() {
               </>
             )}
 
-            {authMethod["close-wsol-ata"] === "encrypted" && (
+            {walletAuth("close-wsol-ata") === "encrypted" && (
               <>
                 <div>
                   <label className="block text-sm font-medium mb-2">{t("formUi.encryptedKey")}</label>
@@ -3369,7 +3485,7 @@ export default function Home() {
               </>
             )}
 
-            {authMethod["close-wsol-ata"] === "private" && (
+            {walletAuth("close-wsol-ata") === "private" && (
               <div>
                 <label className="block text-sm font-medium mb-2">{t("formUi.privateKey")}</label>
                 <input
@@ -3437,7 +3553,7 @@ export default function Home() {
                     setFormData(newFormData);
                   }}
                   className={`py-2 px-3 rounded-lg font-medium transition-colors text-sm ${
-                    authMethod["pumpfun-sell"] === "keystore"
+                    walletAuth("pumpfun-sell") === "keystore"
                       ? "bg-gradient-to-r from-purple-500 to-pink-500 text-white"
                       : "bg-white/5 text-gray-400 hover:bg-white/10"
                   }`}
@@ -3453,7 +3569,7 @@ export default function Home() {
                     setFormData(newFormData);
                   }}
                   className={`py-2 px-3 rounded-lg font-medium transition-colors text-sm ${
-                    authMethod["pumpfun-sell"] === "encrypted"
+                    walletAuth("pumpfun-sell") === "encrypted"
                       ? "bg-gradient-to-r from-purple-500 to-pink-500 text-white"
                       : "bg-white/5 text-gray-400 hover:bg-white/10"
                   }`}
@@ -3470,7 +3586,7 @@ export default function Home() {
                     setFormData(newFormData);
                   }}
                   className={`py-2 px-3 rounded-lg font-medium transition-colors text-sm ${
-                    authMethod["pumpfun-sell"] === "private"
+                    walletAuth("pumpfun-sell") === "private"
                       ? "bg-gradient-to-r from-purple-500 to-pink-500 text-white"
                       : "bg-white/5 text-gray-400 hover:bg-white/10"
                   }`}
@@ -3480,7 +3596,7 @@ export default function Home() {
               </div>
             </div>
 
-            {authMethod["pumpfun-sell"] === "keystore" && (
+            {walletAuth("pumpfun-sell") === "keystore" && (
               <>
                 <div>
                   <label className="block text-sm font-medium mb-2">{t("formUi.uploadKeystore")}</label>
@@ -3507,7 +3623,7 @@ export default function Home() {
               </>
             )}
 
-            {authMethod["pumpfun-sell"] === "encrypted" && (
+            {walletAuth("pumpfun-sell") === "encrypted" && (
               <>
                 <div>
                   <label className="block text-sm font-medium mb-2">{t("formUi.encryptedKey")}</label>
@@ -3531,7 +3647,7 @@ export default function Home() {
               </>
             )}
 
-            {authMethod["pumpfun-sell"] === "private" && (
+            {walletAuth("pumpfun-sell") === "private" && (
               <div>
                 <label className="block text-sm font-medium mb-2">{t("features.pumpfun-sell.privateKeyLabel")}</label>
                 <input
@@ -3571,8 +3687,16 @@ export default function Home() {
               <input
                 type="number"
                 step="0.1"
-                value={formData.slippage || 1}
-                onChange={(e) => handleFormChange("slippage", parseFloat(e.target.value))}
+                value={slippageInputDisplay(formData.slippage)}
+                onChange={(e) => {
+                  const raw = e.target.value;
+                  if (raw === "") {
+                    handleFormChange("slippage", undefined);
+                    return;
+                  }
+                  const n = parseFloat(raw);
+                  handleFormChange("slippage", Number.isNaN(n) ? undefined : n);
+                }}
                 className="w-full px-4 py-2 bg-white/5 border border-white/10 rounded-lg focus:outline-none focus:ring-2 focus:ring-white/20 text-white"
                 placeholder={t("features.pumpfun-sell.slippagePlaceholder")}
                 min="0"
@@ -3620,7 +3744,7 @@ export default function Home() {
                     setFormData(newFormData);
                   }}
                   className={`py-2 px-3 rounded-lg font-medium transition-colors text-sm ${
-                    authMethod["pumpswap-sell"] === "keystore"
+                    walletAuth("pumpswap-sell") === "keystore"
                       ? "bg-gradient-to-r from-purple-500 to-pink-500 text-white"
                       : "bg-white/5 text-gray-400 hover:bg-white/10"
                   }`}
@@ -3636,7 +3760,7 @@ export default function Home() {
                     setFormData(newFormData);
                   }}
                   className={`py-2 px-3 rounded-lg font-medium transition-colors text-sm ${
-                    authMethod["pumpswap-sell"] === "encrypted"
+                    walletAuth("pumpswap-sell") === "encrypted"
                       ? "bg-gradient-to-r from-purple-500 to-pink-500 text-white"
                       : "bg-white/5 text-gray-400 hover:bg-white/10"
                   }`}
@@ -3653,7 +3777,7 @@ export default function Home() {
                     setFormData(newFormData);
                   }}
                   className={`py-2 px-3 rounded-lg font-medium transition-colors text-sm ${
-                    authMethod["pumpswap-sell"] === "private"
+                    walletAuth("pumpswap-sell") === "private"
                       ? "bg-gradient-to-r from-purple-500 to-pink-500 text-white"
                       : "bg-white/5 text-gray-400 hover:bg-white/10"
                   }`}
@@ -3663,7 +3787,7 @@ export default function Home() {
               </div>
             </div>
 
-            {authMethod["pumpswap-sell"] === "keystore" && (
+            {walletAuth("pumpswap-sell") === "keystore" && (
               <>
                 <div>
                   <label className="block text-sm font-medium mb-2">{t("formUi.uploadKeystore")}</label>
@@ -3690,7 +3814,7 @@ export default function Home() {
               </>
             )}
 
-            {authMethod["pumpswap-sell"] === "encrypted" && (
+            {walletAuth("pumpswap-sell") === "encrypted" && (
               <>
                 <div>
                   <label className="block text-sm font-medium mb-2">{t("formUi.encryptedKey")}</label>
@@ -3714,7 +3838,7 @@ export default function Home() {
               </>
             )}
 
-            {authMethod["pumpswap-sell"] === "private" && (
+            {walletAuth("pumpswap-sell") === "private" && (
               <div>
                 <label className="block text-sm font-medium mb-2">{t("features.pumpswap-sell.privateKeyLabel")}</label>
                 <input
@@ -3754,8 +3878,16 @@ export default function Home() {
               <input
                 type="number"
                 step="0.1"
-                value={formData.slippage || 1}
-                onChange={(e) => handleFormChange("slippage", parseFloat(e.target.value))}
+                value={slippageInputDisplay(formData.slippage)}
+                onChange={(e) => {
+                  const raw = e.target.value;
+                  if (raw === "") {
+                    handleFormChange("slippage", undefined);
+                    return;
+                  }
+                  const n = parseFloat(raw);
+                  handleFormChange("slippage", Number.isNaN(n) ? undefined : n);
+                }}
                 className="w-full px-4 py-2 bg-white/5 border border-white/10 rounded-lg focus:outline-none focus:ring-2 focus:ring-white/20 text-white"
                 placeholder={t("features.pumpswap-sell.slippagePlaceholder")}
                 min="0"
@@ -3789,37 +3921,59 @@ export default function Home() {
         );
 
       case "pumpfun-cashback":
-      case "pumpswap-cashback":
+      case "pumpswap-cashback": {
+        const cashbackAuth = walletAuth(selectedForm || "pumpfun-cashback");
         return (
           <div className="space-y-4">
             <div>
               <label className="block text-sm font-medium mb-2">{t("formUi.authMethod")}</label>
-              <div className="flex gap-2">
+              <div className="grid grid-cols-3 gap-2">
                 <button
+                  type="button"
                   onClick={() => {
-                    setAuthMethod({ ...authMethod, [selectedForm || ""]: "keystore" });
+                    setAuthMethod({ ...authMethod, [selectedForm || "pumpfun-cashback"]: "keystore" });
                     const newFormData = { ...formData };
                     delete newFormData.private_key;
+                    delete newFormData.encrypted_key;
                     setFormData(newFormData);
                   }}
-                  className={`flex-1 py-2 px-4 rounded-lg font-medium transition-colors ${
-                    authMethod[selectedForm || ""] === "keystore"
+                  className={`py-2 px-3 rounded-lg font-medium transition-colors text-sm ${
+                    cashbackAuth === "keystore"
                       ? "bg-gradient-to-r from-purple-500 to-pink-500 text-white"
                       : "bg-white/5 text-gray-400 hover:bg-white/10"
                   }`}
                 >
-                  {t("formUi.keystoreRecommended")}
+                  {t("formUi.tabKeystore")}
                 </button>
                 <button
+                  type="button"
                   onClick={() => {
-                    setAuthMethod({ ...authMethod, [selectedForm || ""]: "private" });
+                    setAuthMethod({ ...authMethod, [selectedForm || "pumpfun-cashback"]: "encrypted" });
+                    const newFormData = { ...formData };
+                    delete newFormData.private_key;
+                    delete newFormData.keystoreJson;
+                    setFormData(newFormData);
+                  }}
+                  className={`py-2 px-3 rounded-lg font-medium transition-colors text-sm ${
+                    cashbackAuth === "encrypted"
+                      ? "bg-gradient-to-r from-purple-500 to-pink-500 text-white"
+                      : "bg-white/5 text-gray-400 hover:bg-white/10"
+                  }`}
+                >
+                  {t("formUi.tabEncrypted")}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setAuthMethod({ ...authMethod, [selectedForm || "pumpfun-cashback"]: "private" });
                     const newFormData = { ...formData };
                     delete newFormData.keystoreJson;
+                    delete newFormData.encrypted_key;
                     delete newFormData.password;
                     setFormData(newFormData);
                   }}
-                  className={`flex-1 py-2 px-4 rounded-lg font-medium transition-colors ${
-                    authMethod[selectedForm || ""] === "private"
+                  className={`py-2 px-3 rounded-lg font-medium transition-colors text-sm ${
+                    cashbackAuth === "private"
                       ? "bg-gradient-to-r from-purple-500 to-pink-500 text-white"
                       : "bg-white/5 text-gray-400 hover:bg-white/10"
                   }`}
@@ -3829,13 +3983,13 @@ export default function Home() {
               </div>
             </div>
 
-            {authMethod[selectedForm || ""] === "keystore" ? (
+            {cashbackAuth === "keystore" && (
               <>
                 <div>
                   <label className="block text-sm font-medium mb-2">{t("formUi.uploadKeystore")}</label>
                   <input
                     type="file"
-                    accept=".json"
+                    accept=".json,application/json"
                     onChange={handleFileUpload}
                     className="w-full px-4 py-2 bg-white/5 border border-white/10 rounded-lg focus:outline-none focus:ring-2 focus:ring-white/20 text-white file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:bg-white/10 file:text-white hover:file:bg-white/20"
                   />
@@ -3854,7 +4008,33 @@ export default function Home() {
                   />
                 </div>
               </>
-            ) : (
+            )}
+
+            {cashbackAuth === "encrypted" && (
+              <>
+                <div>
+                  <label className="block text-sm font-medium mb-2">{t("formUi.encryptedKey")}</label>
+                  <textarea
+                    value={formData.encrypted_key || ""}
+                    onChange={(e) => handleFormChange("encrypted_key", e.target.value)}
+                    className="w-full px-4 py-2 bg-white/5 border border-white/10 rounded-lg focus:outline-none focus:ring-2 focus:ring-white/20 text-white min-h-[120px]"
+                    placeholder={t("formUi.placeholderEncryptedKey")}
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium mb-2">{t("formUi.password")}</label>
+                  <input
+                    type="password"
+                    value={formData.password || ""}
+                    onChange={(e) => handleFormChange("password", e.target.value)}
+                    className="w-full px-4 py-2 bg-white/5 border border-white/10 rounded-lg focus:outline-none focus:ring-2 focus:ring-white/20 text-white"
+                    placeholder={t("formUi.placeholderDecryptPassword")}
+                  />
+                </div>
+              </>
+            )}
+
+            {cashbackAuth === "private" && (
               <div>
                 <label className="block text-sm font-medium mb-2">{t("formUi.privateKey")}</label>
                 <input
@@ -3898,6 +4078,7 @@ export default function Home() {
             )}
           </div>
         );
+      }
 
       default:
         return <div className="text-center text-gray-400">{t("formUi.pickFeature")}</div>;
